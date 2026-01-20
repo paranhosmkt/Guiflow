@@ -21,13 +21,17 @@ import {
   Pencil,
   Trash2,
   Lightbulb,
-  AlertCircle
+  AlertCircle,
+  Calendar,
+  History,
+  Clock
 } from 'lucide-react';
 import { Task, UserStats, Reward, SubTask, TaskStatus } from './types';
 
 // Constantes para LocalStorage
 const STORAGE_KEYS = {
   TASKS: 'guiflow_tasks_v2',
+  COMPLETED_TASKS: 'guiflow_completed_tasks_v2',
   REWARDS: 'guiflow_rewards_v2',
   STATS: 'guiflow_stats_v2'
 };
@@ -61,6 +65,11 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [completedTasks, setCompletedTasks] = useState<Task[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.COMPLETED_TASKS);
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [rewards, setRewards] = useState<Reward[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.REWARDS);
     return saved ? JSON.parse(saved) : INITIAL_REWARDS;
@@ -71,7 +80,7 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : { points: 0, tasksCompleted: 0, streak: 1 };
   });
 
-  const [view, setView] = useState<'global' | 'local' | 'rewards'>('global');
+  const [view, setView] = useState<'global' | 'local' | 'rewards' | 'history'>('global');
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [motivation, setMotivation] = useState("");
   const [draggedSubTaskId, setDraggedSubTaskId] = useState<string | null>(null);
@@ -88,11 +97,13 @@ const App: React.FC = () => {
 
   // Forms
   const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [taskToProject, setTaskToProject] = useState({ title: "", points: 20, projectId: "" });
+  const [newTaskDate, setNewTaskDate] = useState("");
+  const [taskToProject, setTaskToProject] = useState({ title: "", points: 20, projectId: "", dueDate: "" });
   const [newReward, setNewReward] = useState({ title: "", cost: 50, icon: "🎁" });
 
   // Sincronização LocalStorage
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks)); }, [tasks]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.COMPLETED_TASKS, JSON.stringify(completedTasks)); }, [completedTasks]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.REWARDS, JSON.stringify(rewards)); }, [rewards]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(stats)); }, [stats]);
 
@@ -120,13 +131,22 @@ const App: React.FC = () => {
       setCyclesCompleted(nextCycles);
       setStats(s => ({ ...s, points: s.points + 15 }));
       
+      // Adicionar tempo focado ao objetivo ativo
+      if (activeTaskId) {
+        setTasks(prev => prev.map(t => 
+          t.id === activeTaskId 
+            ? { ...t, totalTimeSpent: (t.totalTimeSpent || 0) + 25 } 
+            : t
+        ));
+      }
+
       setTimerMode('break');
       if (nextCycles % 6 === 0) {
-        setTimerSeconds(45 * 60); // Descanso longo de 45 minutos após 6 ciclos
-        alert("Ciclo 6 concluído! Hora de um descanso longo (45 min). Ganhou 15 pontos.");
+        setTimerSeconds(45 * 60); 
+        alert("Ciclo 6 concluído! Hora de um descanso longo (45 min). Ganhou 15 pontos e registrou 25 min de foco.");
       } else {
-        setTimerSeconds(5 * 60); // Descanso curto de 5 minutos
-        alert(`Bloco de foco ${nextCycles}/6 concluído! Ganhou 15 pontos.`);
+        setTimerSeconds(5 * 60);
+        alert(`Bloco de foco ${nextCycles}/6 concluído! Ganhou 15 pontos e registrou 25 min de foco.`);
       }
     } else {
       setTimerMode('work');
@@ -143,15 +163,17 @@ const App: React.FC = () => {
       description: "",
       priority: 'medium',
       status: 'todo',
-      dueDate: new Date().toISOString().split('T')[0],
+      dueDate: newTaskDate || new Date().toISOString().split('T')[0],
       estimatedTime: 30,
       category: 'Geral',
       completed: false,
       subTasks: [],
-      rewardPoints: 50
+      rewardPoints: 50,
+      totalTimeSpent: 0
     };
     setTasks([...tasks, newTask]);
     setNewTaskTitle("");
+    setNewTaskDate("");
     setActiveModal(null);
   };
 
@@ -160,6 +182,12 @@ const App: React.FC = () => {
     if (confirm("Deseja realmente excluir este objetivo e todas as suas tarefas?")) {
       setTasks(tasks.filter(t => t.id !== id));
       if (activeTaskId === id) setActiveTaskId(null);
+    }
+  };
+
+  const handleDeleteHistoryTask = (id: string) => {
+    if (confirm("Deseja realmente remover este registro do histórico?")) {
+      setCompletedTasks(prev => prev.filter(t => t.id !== id));
     }
   };
 
@@ -172,11 +200,12 @@ const App: React.FC = () => {
       title: taskToProject.title, 
       completed: false, 
       status: 'todo',
-      rewardPoints: taskToProject.points
+      rewardPoints: taskToProject.points,
+      dueDate: taskToProject.dueDate
     };
 
     setTasks(prev => prev.map(t => t.id === targetId ? { ...t, subTasks: [...t.subTasks, newSub] } : t));
-    setTaskToProject({ title: "", points: 20, projectId: "" });
+    setTaskToProject({ title: "", points: 20, projectId: "", dueDate: "" });
     setActiveModal(null);
   };
 
@@ -219,9 +248,17 @@ const App: React.FC = () => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
     
+    const finalizedTask: Task = {
+      ...task,
+      status: 'done',
+      completed: true,
+      completedAt: new Date().toISOString()
+    };
+
     setStats(s => ({ ...s, points: s.points + task.rewardPoints, tasksCompleted: s.tasksCompleted + 1 }));
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'done', completed: true } : t));
-    setView('global');
+    setCompletedTasks([finalizedTask, ...completedTasks]);
+    setTasks(prev => prev.filter(t => t.id !== id));
+    setView('history');
     setActiveTaskId(null);
   };
 
@@ -249,6 +286,31 @@ const App: React.FC = () => {
     }
   };
 
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return null;
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}`;
+  };
+
+  const formatTimeSpent = (minutes: number = 0) => {
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  };
+
+  const isOverdue = (dateStr: string) => {
+    if (!dateStr) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const date = new Date(dateStr);
+    // Para lidar corretamente com o timezone do input date, resetamos as horas
+    // mas o input type="date" retorna no fuso local.
+    // Adicionamos um pequeno offset para garantir que a comparação seja justa
+    date.setHours(23, 59, 59, 999); 
+    return date < today;
+  };
+
   return (
     <div className="min-h-screen pb-20 md:pb-0 md:pl-64 flex flex-col bg-slate-50 text-slate-900">
       {/* Sidebar */}
@@ -262,6 +324,7 @@ const App: React.FC = () => {
           <NavItem active={view === 'global'} onClick={() => setView('global')} icon={<LayoutDashboard size={20} />} label="Geral" />
           <NavItem active={view === 'local'} onClick={() => setView('local')} icon={<Target size={20} />} label="Foco" />
           <NavItem active={view === 'rewards'} onClick={() => setView('rewards')} icon={<Trophy size={20} />} label="Prêmios" />
+          <NavItem active={view === 'history'} onClick={() => setView('history')} icon={<History size={20} />} label="Histórico" />
         </div>
 
         <div className="hidden md:mt-auto md:block w-full">
@@ -278,7 +341,9 @@ const App: React.FC = () => {
       <main className="flex-1 p-4 md:p-10 w-full max-w-[1200px] mx-auto pt-16">
         <header className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-1">
-            <h2 className="text-3xl font-black tracking-tight">{view === 'global' ? 'Visão Geral' : view === 'local' ? 'Foco Local' : 'Recompensas'}</h2>
+            <h2 className="text-3xl font-black tracking-tight">
+              {view === 'global' ? 'Visão Geral' : view === 'local' ? 'Foco Local' : view === 'rewards' ? 'Recompensas' : 'Histórico de Conquistas'}
+            </h2>
             <div className="flex items-center gap-2 text-slate-500">
               <Lightbulb size={16} className="text-amber-500" />
               <p className="text-sm font-medium italic">{motivation}</p>
@@ -303,7 +368,7 @@ const App: React.FC = () => {
         {view === 'global' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
             {tasks.filter(t => !t.completed).map(task => (
-              <MacroCard key={task.id} task={task} onFocus={() => { setActiveTaskId(task.id); setView('local'); }} onDelete={(e) => handleDeleteMacro(task.id, e)} />
+              <MacroCard key={task.id} task={task} onFocus={() => { setActiveTaskId(task.id); setView('local'); }} onDelete={(e: React.MouseEvent) => handleDeleteMacro(task.id, e)} formatDate={formatDate} isOverdue={isOverdue} />
             ))}
             
             {tasks.filter(t => !t.completed).length === 0 && (
@@ -327,6 +392,14 @@ const App: React.FC = () => {
                     <div>
                       <div className="flex items-center gap-2 mb-2">
                         <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Foco Atual</span>
+                        {activeTask.dueDate && (
+                          <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isOverdue(activeTask.dueDate) ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-500'}`}>
+                            <Calendar size={10} /> Prazo: {formatDate(activeTask.dueDate)}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1 bg-slate-50 text-slate-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+                          <Clock size={10} /> Focado: {formatTimeSpent(activeTask.totalTimeSpent)}
+                        </span>
                       </div>
                       <h2 className="text-3xl font-black text-slate-800 mb-2">{activeTask.title}</h2>
                       <p className="text-slate-500">Mova as tarefas entre as colunas conforme progride.</p>
@@ -358,7 +431,7 @@ const App: React.FC = () => {
                          <button onClick={() => { setIsTimerActive(false); setTimerSeconds(25 * 60); setTimerMode('work'); setCyclesCompleted(0); }} className="w-14 h-14 rounded-2xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:text-slate-600 transition-all shadow-sm"><RotateCcw size={24} /></button>
                       </div>
                     </div>
-                    {/* Botão de Nova Tarefa movido para baixo do Pomodoro */}
+                    {/* Botão de Nova Tarefa */}
                     <button onClick={() => setActiveModal('task')} className="bg-emerald-600 text-white px-6 py-4 rounded-[2rem] font-black shadow-lg shadow-emerald-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
                       <PlusCircle size={22} /> Nova tarefa
                     </button>
@@ -367,9 +440,9 @@ const App: React.FC = () => {
 
                 {/* Kanban Board */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-h-[500px]">
-                  <KanbanCol title="A Fazer" tasks={activeTask.subTasks.filter(s => s.status === 'todo')} onDrop={() => onDrop('todo')} onDragOver={(e) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onDeleteSubTask={(subId) => handleDeleteSubTask(activeTask.id, subId)} />
-                  <KanbanCol title="Fazendo" tasks={activeTask.subTasks.filter(s => s.status === 'doing')} onDrop={() => onDrop('doing')} onDragOver={(e) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onDeleteSubTask={(subId) => handleDeleteSubTask(activeTask.id, subId)} highlight />
-                  <KanbanCol title="Concluído" tasks={activeTask.subTasks.filter(s => s.status === 'done')} onDrop={() => onDrop('done')} onDragOver={(e) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onDeleteSubTask={(subId) => handleDeleteSubTask(activeTask.id, subId)} />
+                  <KanbanCol title="A Fazer" tasks={activeTask.subTasks.filter(s => s.status === 'todo')} onDrop={() => onDrop('todo')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} />
+                  <KanbanCol title="Fazendo" tasks={activeTask.subTasks.filter(s => s.status === 'doing')} onDrop={() => onDrop('doing')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} highlight />
+                  <KanbanCol title="Concluído" tasks={activeTask.subTasks.filter(s => s.status === 'done')} onDrop={() => onDrop('done')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} />
                 </div>
               </>
             ) : (
@@ -416,6 +489,59 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+
+        {view === 'history' && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            {completedTasks.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {completedTasks.map(task => (
+                  <div key={task.id} className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm flex flex-col justify-between group relative">
+                    <button 
+                      onClick={() => handleDeleteHistoryTask(task.id)} 
+                      className="absolute top-6 right-6 p-2 text-slate-200 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full flex items-center gap-1">
+                          <CheckCircle2 size={10} /> Concluído
+                        </span>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                          {task.completedAt ? new Date(task.completedAt).toLocaleDateString('pt-BR') : '-'}
+                        </span>
+                      </div>
+                      <h3 className="text-xl font-black text-slate-800 mb-3 pr-8">{task.title}</h3>
+                      <div className="flex items-center gap-4 text-slate-500">
+                        <div className="flex items-center gap-1 text-[11px] font-bold">
+                          <Clock size={14} className="text-indigo-500" />
+                          <span>Focado: {formatTimeSpent(task.totalTimeSpent)}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-[11px] font-bold">
+                          <Briefcase size={14} className="text-slate-400" />
+                          <span>{task.subTasks.length} tarefas realizadas</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-6 pt-6 border-t border-slate-50 flex items-center justify-between">
+                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recompensa Ganha:</span>
+                       <div className="flex items-center gap-1 text-indigo-600 font-black">
+                         <Zap size={14} fill="currentColor" /> +{task.rewardPoints} pts
+                       </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-32 bg-white rounded-[3rem] border-2 border-dashed border-slate-200">
+                <History size={54} className="text-slate-200 mx-auto mb-6" />
+                <h3 className="text-xl font-black text-slate-400 mb-2">Histórico vazio.</h3>
+                <p className="text-slate-400 mb-8">Conclua seu primeiro objetivo macro para vê-lo aqui!</p>
+                <button onClick={() => setView('global')} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black">Ver Objetivos</button>
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       {/* Modais */}
@@ -425,6 +551,10 @@ const App: React.FC = () => {
             <div>
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 block">Título do Objetivo</label>
               <input autoFocus value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} placeholder="Ex: Organizar o Escritório" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-lg outline-none focus:border-indigo-600 transition-colors" />
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 block">Prazo Final</label>
+              <input type="date" value={newTaskDate} onChange={e => setNewTaskDate(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-600" />
             </div>
             <button onClick={handleCreateMacro} disabled={!newTaskTitle.trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-indigo-100 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50">Começar Projeto</button>
           </div>
@@ -437,6 +567,10 @@ const App: React.FC = () => {
             <div>
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 block">O que precisa ser feito?</label>
               <input autoFocus value={taskToProject.title} onChange={e => setTaskToProject({...taskToProject, title: e.target.value})} placeholder="Ex: Tirar o lixo da mesa" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors" />
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 block">Prazo da Tarefa (Opcional)</label>
+              <input type="date" value={taskToProject.dueDate} onChange={e => setTaskToProject({...taskToProject, dueDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-emerald-600" />
             </div>
             <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl">
               <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Valor da Recompensa:</span>
@@ -494,15 +628,22 @@ const NavItem = ({ active, onClick, icon, label }: any) => (
   </button>
 );
 
-const MacroCard = ({ task, onFocus, onDelete }: any) => {
+const MacroCard = ({ task, onFocus, onDelete, formatDate, isOverdue }: any) => {
   const completed = task.subTasks.filter((s:any) => s.completed).length;
   const total = task.subTasks.length;
   const pct = total > 0 ? (completed / total) * 100 : 0;
   return (
-    <div onClick={onFocus} className="bg-white p-8 rounded-[3rem] border-2 border-slate-50 hover:border-indigo-100 transition-all cursor-pointer shadow-sm group relative flex flex-col justify-between h-56">
+    <div onClick={onFocus} className="bg-white p-8 rounded-[3rem] border-2 border-slate-50 hover:border-indigo-100 transition-all cursor-pointer shadow-sm group relative flex flex-col justify-between h-64">
       <button onClick={onDelete} className="absolute top-6 right-6 p-2 text-slate-200 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
       <div>
-        <div className="mb-4"><span className="text-[9px] font-black uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-lg text-slate-400">Projeto</span></div>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <span className="text-[9px] font-black uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-lg text-slate-400">Projeto</span>
+          {task.dueDate && (
+            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg flex items-center gap-1 ${isOverdue(task.dueDate) ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-500'}`}>
+              <Calendar size={10} /> {formatDate(task.dueDate)}
+            </span>
+          )}
+        </div>
         <h3 className="text-xl font-black text-slate-800 leading-tight group-hover:text-indigo-600 transition-colors line-clamp-2">{task.title}</h3>
       </div>
       <div className="mt-8">
@@ -518,7 +659,7 @@ const MacroCard = ({ task, onFocus, onDelete }: any) => {
   );
 };
 
-const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onDeleteSubTask, highlight }: any) => (
+const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onDeleteSubTask, formatDate, isOverdue, highlight }: any) => (
   <div className={`flex flex-col h-full rounded-[3rem] p-5 border-2 border-dashed ${highlight ? 'bg-indigo-50/20 border-indigo-100' : 'bg-slate-50/50 border-slate-200'}`} onDrop={onDrop} onDragOver={onDragOver}>
     <div className="flex items-center justify-between mb-6 px-3">
        <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{title}</h4>
@@ -537,8 +678,15 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onDeleteSubT
              <GripVertical size={16} className="text-slate-200 group-hover:text-slate-400 mt-0.5" />
              <div className="flex-1">
                 <p className={`font-bold text-slate-700 leading-tight pr-4 ${t.completed ? 'line-through' : ''}`}>{t.title}</p>
-                <div className="flex items-center gap-1 text-[10px] font-black text-indigo-500 uppercase mt-2">
-                  <Zap size={10} fill="currentColor" /> +{t.rewardPoints} pts
+                <div className="flex flex-wrap items-center gap-3 mt-2">
+                  <div className="flex items-center gap-1 text-[10px] font-black text-indigo-500 uppercase">
+                    <Zap size={10} fill="currentColor" /> +{t.rewardPoints} pts
+                  </div>
+                  {t.dueDate && !t.completed && (
+                    <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${isOverdue(t.dueDate) ? 'text-rose-500' : 'text-emerald-500'}`}>
+                      <Calendar size={10} /> {formatDate(t.dueDate)}
+                    </div>
+                  )}
                 </div>
              </div>
           </div>

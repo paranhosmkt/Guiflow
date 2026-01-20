@@ -8,6 +8,7 @@ export interface SubTask {
   completed: boolean;
   status: TaskStatus;
   rewardPoints: number; // Points awarded when this specific sub-task is completed
+  dueDate?: string; // Optional deadline for the sub-task
 }
 
 export interface Task {
@@ -22,6 +23,8 @@ export interface Task {
   completed: boolean;
   subTasks: SubTask[];
   rewardPoints: number; // Bonus points for completing the whole macro project
+  totalTimeSpent?: number; // Total focused time in minutes
+  completedAt?: string; // ISO string date
 }
 
 export interface Reward {
