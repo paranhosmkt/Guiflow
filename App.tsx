@@ -27,7 +27,9 @@ import {
   Clock,
   Sun,
   Moon,
-  ArrowLeft
+  ArrowLeft,
+  MessageSquare,
+  Info
 } from 'lucide-react';
 import { Task, UserStats, Reward, SubTask, TaskStatus } from './types';
 
@@ -106,8 +108,9 @@ const App: React.FC = () => {
 
   // Forms
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
   const [newTaskDate, setNewTaskDate] = useState("");
-  const [taskToProject, setTaskToProject] = useState({ title: "", points: 20, projectId: "", dueDate: "" });
+  const [taskToProject, setTaskToProject] = useState({ title: "", notes: "", points: 20, projectId: "", dueDate: "" });
   const [newReward, setNewReward] = useState({ title: "", cost: 50, icon: "🎁" });
 
   // Sincronização LocalStorage
@@ -170,7 +173,7 @@ const App: React.FC = () => {
     const newTask: Task = {
       id: Date.now().toString(),
       title: newTaskTitle,
-      description: "",
+      description: newTaskDescription,
       priority: 'medium',
       status: 'todo',
       dueDate: newTaskDate || new Date().toISOString().split('T')[0],
@@ -183,6 +186,7 @@ const App: React.FC = () => {
     };
     setTasks([...tasks, newTask]);
     setNewTaskTitle("");
+    setNewTaskDescription("");
     setNewTaskDate("");
     setActiveModal(null);
   };
@@ -208,6 +212,7 @@ const App: React.FC = () => {
     const newSub: SubTask = { 
       id: Math.random().toString(36).substr(2, 9), 
       title: taskToProject.title, 
+      notes: taskToProject.notes,
       completed: false, 
       status: 'todo',
       rewardPoints: taskToProject.points,
@@ -215,7 +220,7 @@ const App: React.FC = () => {
     };
 
     setTasks(prev => prev.map(t => t.id === targetId ? { ...t, subTasks: [...t.subTasks, newSub] } : t));
-    setTaskToProject({ title: "", points: 20, projectId: "", dueDate: "" });
+    setTaskToProject({ title: "", notes: "", points: 20, projectId: "", dueDate: "" });
     setActiveModal(null);
   };
 
@@ -437,6 +442,9 @@ const App: React.FC = () => {
                           </span>
                         </div>
                         <h2 className="text-3xl md:text-4xl font-black mb-2 leading-tight">{activeTask.title}</h2>
+                        {activeTask.description && (
+                          <p className={`mb-4 italic text-sm ${textMuted}`}>"{activeTask.description}"</p>
+                        )}
                         <p className={textMuted}>Organize as micro-tarefas para atingir seu objetivo principal.</p>
                       </div>
                       
@@ -588,6 +596,10 @@ const App: React.FC = () => {
               <input autoFocus value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} placeholder="Ex: Organizar o Escritório" className={`w-full p-4 border-2 rounded-2xl font-bold text-lg outline-none focus:border-indigo-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Contexto ou Comentário (Opcional)</label>
+              <textarea value={newTaskDescription} onChange={e => setNewTaskDescription(e.target.value)} placeholder="Por que isso é importante?" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 resize-none h-24 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+            <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo Final</label>
               <input type="date" value={newTaskDate} onChange={e => setNewTaskDate(e.target.value)} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
@@ -597,11 +609,15 @@ const App: React.FC = () => {
       )}
 
       {activeModal === 'task' && (
-        <Modal title="Nova Tarefa" onClose={() => setActiveModal(null)} theme={theme}>
+        <Modal title="Nova Micro-tarefa" onClose={() => setActiveModal(null)} theme={theme}>
           <div className="space-y-6">
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>O que precisa ser feito?</label>
               <input autoFocus value={taskToProject.title} onChange={e => setTaskToProject({...taskToProject, title: e.target.value})} placeholder="Ex: Tirar o lixo da mesa" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Observação ou Dica (Opcional)</label>
+              <textarea value={taskToProject.notes} onChange={e => setTaskToProject({...taskToProject, notes: e.target.value})} placeholder="Algo para não esquecer..." className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 resize-none h-24 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo da Tarefa (Opcional)</label>
@@ -675,7 +691,7 @@ const MacroCard = ({ task, onFocus, onDelete, formatDate, isOverdue, theme }: an
   const isLight = theme === 'light';
 
   return (
-    <div onClick={onFocus} className={`p-8 rounded-[3rem] border-2 transition-all cursor-pointer shadow-sm group relative flex flex-col justify-between h-64 ${isLight ? 'bg-white border-slate-50 hover:border-indigo-100' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/30'}`}>
+    <div onClick={onFocus} className={`p-8 rounded-[3rem] border-2 transition-all cursor-pointer shadow-sm group relative flex flex-col justify-between h-72 ${isLight ? 'bg-white border-slate-50 hover:border-indigo-100' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/30'}`}>
       <button onClick={onDelete} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
       <div>
         <div className="mb-4 flex flex-wrap gap-2">
@@ -687,8 +703,11 @@ const MacroCard = ({ task, onFocus, onDelete, formatDate, isOverdue, theme }: an
           )}
         </div>
         <h3 className={`text-xl font-black leading-tight group-hover:text-indigo-500 transition-colors line-clamp-2 ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>{task.title}</h3>
+        {task.description && (
+          <p className={`text-[11px] mt-2 line-clamp-2 italic ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>{task.description}</p>
+        )}
       </div>
-      <div className="mt-8">
+      <div className="mt-auto pt-6">
         <div className="flex justify-between items-end mb-2">
           <span className={`text-[10px] font-black uppercase tracking-widest ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>{completed}/{total} tarefas</span>
           <span className="text-sm font-black text-indigo-500">{Math.round(pct)}%</span>
@@ -723,6 +742,12 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onDeleteSubT
                <GripVertical size={16} className={`${isLight ? 'text-slate-200 group-hover:text-slate-400' : 'text-slate-700 group-hover:text-slate-500'} mt-0.5`} />
                <div className="flex-1">
                   <p className={`font-bold leading-tight pr-4 ${t.completed ? 'line-through' : ''}`}>{t.title}</p>
+                  {t.notes && (
+                    <div className="flex items-start gap-1 mt-1">
+                      <MessageSquare size={10} className="mt-1 flex-shrink-0 text-indigo-400" />
+                      <p className={`text-[10px] italic leading-tight ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>{t.notes}</p>
+                    </div>
+                  )}
                   <div className="flex flex-wrap items-center gap-3 mt-2">
                     <div className="flex items-center gap-1 text-[10px] font-black text-indigo-500 uppercase">
                       <Zap size={10} fill="currentColor" /> +{t.rewardPoints} pts
@@ -752,7 +777,7 @@ const Modal = ({ title, onClose, children, theme }: any) => {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 duration-200 border ${isLight ? 'bg-white border-slate-100' : 'bg-slate-900 border-slate-800'}`}>
+      <div className={`relative w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 duration-200 border overflow-y-auto max-h-[90vh] ${isLight ? 'bg-white border-slate-100' : 'bg-slate-900 border-slate-800'}`}>
         <button onClick={onClose} className={`absolute right-8 top-8 transition-colors ${isLight ? 'text-slate-300 hover:text-slate-600' : 'text-slate-600 hover:text-slate-300'}`}><X size={28} /></button>
         <h3 className={`text-2xl font-black mb-8 tracking-tighter ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>{title}</h3>
         {children}

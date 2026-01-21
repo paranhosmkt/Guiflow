@@ -1,4 +1,3 @@
-
 export type Priority = 'low' | 'medium' | 'high';
 export type TaskStatus = 'todo' | 'doing' | 'done';
 
@@ -9,6 +8,7 @@ export interface SubTask {
   status: TaskStatus;
   rewardPoints: number; // Points awarded when this specific sub-task is completed
   dueDate?: string; // Optional deadline for the sub-task
+  notes?: string; // Comentário ou observação sobre a micro-tarefa
 }
 
 export interface Task {
