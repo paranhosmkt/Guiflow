@@ -63,7 +63,7 @@ const MOTIVATION_QUOTES = [
 
 const EMOJI_OPTIONS = [
   '🎁', '🍫', '🍦', '🍕', '🎮', '🎬', '📺', '📱', '🛌', '🧘', 
-  '🛀', '🛀', '📚', '🎨', '🎧', '🎸', '🛹', '🍦', '🧁', '🍕',
+  '🛀', '🛀', '📚', '🎨', '🎧', '🎸', '痕', '🍦', '🧁', '🍕',
   '☕', '🍵', '🍷', '🍺', '🏖️', '⛰️', '🎡', '🎢', '💎', '💰'
 ];
 
@@ -618,6 +618,9 @@ const App: React.FC = () => {
                               <Calendar size={10} /> Prazo: {formatDate(activeTask.dueDate)}
                             </span>
                           )}
+                          <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${theme === 'light' ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-300'}`}>
+                            <Clock size={10} /> Tempo Total: {formatTimeSpent(activeTask.totalTimeSpent)}
+                          </span>
                         </div>
                         <h2 className="text-3xl md:text-4xl font-black mb-2 leading-tight">{activeTask.title}</h2>
                         {activeTask.description && <p className={`mb-6 italic text-sm ${textMuted}`}>"{activeTask.description}"</p>}
@@ -669,6 +672,13 @@ const App: React.FC = () => {
                          </span>
                       </div>
                       <div className="text-5xl font-black tabular-nums tracking-tighter mb-4">{Math.floor(timerSeconds / 60).toString().padStart(2, '0')}:{(timerSeconds % 60).toString().padStart(2, '0')}</div>
+                      
+                      {/* Indicador de Tempo focado na tarefa ativa */}
+                      <div className={`mb-6 flex items-center gap-2 px-4 py-2 rounded-2xl ${theme === 'light' ? 'bg-white/40' : 'bg-black/20'}`}>
+                        <Briefcase size={14} className="text-indigo-500" />
+                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Tempo de Trabalho: {formatTimeSpent(activeTask.totalTimeSpent)}</span>
+                      </div>
+
                       <div className="flex gap-3">
                          <button onClick={toggleTimer} className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${timerMode === 'work' ? 'bg-rose-600 shadow-rose-900/20' : 'bg-emerald-600 shadow-emerald-900/20'} hover:scale-110 active:scale-90 transition-all`}>
                            {isTimerActive ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
