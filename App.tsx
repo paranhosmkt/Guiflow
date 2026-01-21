@@ -63,7 +63,7 @@ const MOTIVATION_QUOTES = [
 
 const EMOJI_OPTIONS = [
   '🎁', '🍫', '🍦', '🍕', '🎮', '🎬', '📺', '📱', '🛌', '🧘', 
-  '🛀', '🛀', '📚', '🎨', '🎧', '🎸', '痕', '🍦', '🧁', '🍕',
+  '🛀', '🛀', '📚', '🎨', '🎧', '🎸', '🛹', '🍦', '🧁', '🍕',
   '☕', '🍵', '🍷', '🍺', '🏖️', '⛰️', '🎡', '🎢', '💎', '💰'
 ];
 
@@ -181,23 +181,40 @@ const App: React.FC = () => {
     return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
   };
 
+  // Temporizador com lógica de sincronização por Delta de tempo
   useEffect(() => {
     if (isTimerActive && timerSeconds > 0) {
       lastTickRef.current = Date.now();
       timerRef.current = window.setInterval(() => {
         const now = Date.now();
         const delta = now - lastTickRef.current;
-        const secondsToSubtract = Math.floor(delta / 1000);
-        if (secondsToSubtract >= 1) {
-          setTimerSeconds(prev => Math.max(0, prev - secondsToSubtract));
-          lastTickRef.current += secondsToSubtract * 1000;
+        const secondsElapsed = Math.floor(delta / 1000);
+        
+        if (secondsElapsed >= 1) {
+          lastTickRef.current += secondsElapsed * 1000;
+          
+          setTimerSeconds(prev => {
+            const actualSub = Math.min(prev, secondsElapsed);
+            const nextVal = prev - actualSub;
+            
+            // Se estiver em modo TRABALHO e houver uma tarefa vinculada, atualizamos o tempo real dela
+            if (timerMode === 'work' && timerBoundTaskId) {
+              setTasks(currentTasks => currentTasks.map(t => 
+                t.id === timerBoundTaskId 
+                  ? { ...t, totalTimeSpent: (t.totalTimeSpent || 0) + (actualSub / 60) } 
+                  : t
+              ));
+            }
+            
+            return nextVal;
+          });
         }
-      }, 200);
+      }, 500); // Checagem frequente para alta precisão
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isTimerActive]);
+  }, [isTimerActive, timerMode, timerBoundTaskId]);
 
   useEffect(() => {
     if (timerSeconds === 0 && isTimerActive) {
@@ -222,14 +239,9 @@ const App: React.FC = () => {
       const nextCycles = cyclesCompleted + 1;
       setCyclesCompleted(nextCycles);
       playAlertSound('work-end');
-      const targetTaskId = timerBoundTaskId || activeTaskId;
-      if (targetTaskId) {
-        setTasks(prev => prev.map(t => 
-          t.id === targetTaskId 
-            ? { ...t, totalTimeSpent: (t.totalTimeSpent || 0) + 25 } 
-            : t
-        ));
-      }
+      
+      // Observação: O tempo totalTimeSpent agora é atualizado segundo a segundo no useEffect
+      
       setTimerMode('break');
       if (nextCycles % 6 === 0) {
         setTimerSeconds(45 * 60); 
@@ -319,7 +331,6 @@ const App: React.FC = () => {
   const handleAddLink = () => {
     if (!newLink.title.trim() || !newLink.url.trim() || !activeTaskId) return;
     
-    // Add http:// if missing
     let url = newLink.url.trim();
     if (!/^https?:\/\//i.test(url)) {
       url = 'https://' + url;
@@ -482,9 +493,10 @@ const App: React.FC = () => {
   };
 
   const formatTimeSpent = (minutes: number = 0) => {
-    if (minutes < 60) return `${minutes}m`;
+    if (minutes < 1) return `${Math.round(minutes * 60)}s`;
+    if (minutes < 60) return `${Math.floor(minutes)}m ${Math.round((minutes % 1) * 60)}s`;
     const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
+    const mins = Math.floor(minutes % 60);
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   };
 
@@ -514,7 +526,7 @@ const App: React.FC = () => {
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg mt-1"><Zap size={22} fill="currentColor" /></div>
             <div>
-              <h1 className="text-xl font-black tracking-tighter leading-none">GUIFLOW</h1>
+              <h1 className="text-xl font-black tracking-tighter leading-none">GUITASK</h1>
               <p className={`text-[10px] font-bold tracking-tight mt-1 ${textMuted}`}>Clareza para mentes inquietas</p>
             </div>
           </div>
@@ -625,7 +637,6 @@ const App: React.FC = () => {
                         <h2 className="text-3xl md:text-4xl font-black mb-2 leading-tight">{activeTask.title}</h2>
                         {activeTask.description && <p className={`mb-6 italic text-sm ${textMuted}`}>"{activeTask.description}"</p>}
                         
-                        {/* Seção de Links */}
                         <div className="mt-8">
                           <div className="flex items-center justify-between mb-4">
                             <h4 className="text-[11px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
@@ -673,10 +684,9 @@ const App: React.FC = () => {
                       </div>
                       <div className="text-5xl font-black tabular-nums tracking-tighter mb-4">{Math.floor(timerSeconds / 60).toString().padStart(2, '0')}:{(timerSeconds % 60).toString().padStart(2, '0')}</div>
                       
-                      {/* Indicador de Tempo focado na tarefa ativa */}
                       <div className={`mb-6 flex items-center gap-2 px-4 py-2 rounded-2xl ${theme === 'light' ? 'bg-white/40' : 'bg-black/20'}`}>
                         <Briefcase size={14} className="text-indigo-500" />
-                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Tempo de Trabalho: {formatTimeSpent(activeTask.totalTimeSpent)}</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Acumulado: {formatTimeSpent(activeTask.totalTimeSpent)}</span>
                       </div>
 
                       <div className="flex gap-3">
