@@ -183,7 +183,6 @@ const App: React.FC = () => {
     if (isTimerActive && timerSeconds > 0) {
       lastTickRef.current = Date.now();
       
-      // Checagem frequente (200ms) para compensar lags de sistema ou suspensão de aba
       timerRef.current = window.setInterval(() => {
         const now = Date.now();
         const delta = now - lastTickRef.current;
@@ -200,7 +199,6 @@ const App: React.FC = () => {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isTimerActive]);
 
-  // Efeito separado para monitorar a conclusão (evita problemas de stale closures)
   useEffect(() => {
     if (timerSeconds === 0 && isTimerActive) {
       handleTimerComplete();
@@ -224,7 +222,9 @@ const App: React.FC = () => {
     if (timerMode === 'work') {
       const nextCycles = cyclesCompleted + 1;
       setCyclesCompleted(nextCycles);
-      setStats(s => ({ ...s, points: s.points + 15 }));
+      
+      // NOTA: Removida a atribuição automática de 15 pontos aqui.
+      // Agora o usuário ganha pontos apenas por tarefas ou conclusão de objetivo.
       
       playAlertSound('work-end');
 
@@ -352,8 +352,16 @@ const App: React.FC = () => {
             if (st.id === subId) {
               const wasDone = st.status === 'done';
               const isNowDone = newStatus === 'done';
-              if (!wasDone && isNowDone) setStats(s => ({ ...s, points: s.points + st.rewardPoints }));
-              if (wasDone && !isNowDone) setStats(s => ({ ...s, points: Math.max(0, s.points - st.rewardPoints) }));
+              
+              // Pontuação ganha apenas ao mover para Concluído
+              if (!wasDone && isNowDone) {
+                setStats(s => ({ ...s, points: s.points + st.rewardPoints }));
+              }
+              // Pontuação perdida se tirar do Concluído (evita trapaça)
+              if (wasDone && !isNowDone) {
+                setStats(s => ({ ...s, points: Math.max(0, s.points - st.rewardPoints) }));
+              }
+              
               return { ...st, status: newStatus, completed: isNowDone };
             }
             return st;
@@ -391,6 +399,7 @@ const App: React.FC = () => {
 
     triggerCelebration(task.rewardPoints);
 
+    // Pontuação ganha ao finalizar o objetivo macro
     setStats(s => ({ ...s, points: s.points + task.rewardPoints, tasksCompleted: s.tasksCompleted + 1 }));
     setCompletedTasks([finalizedTask, ...completedTasks]);
     setTasks(prev => prev.filter(t => t.id !== id));
@@ -634,7 +643,7 @@ const App: React.FC = () => {
                       {/* Contador de Tempo Acumulado na Atividade */}
                       <div className={`mb-6 flex items-center gap-2 px-4 py-2 rounded-2xl ${theme === 'light' ? 'bg-white/40' : 'bg-black/20'}`}>
                         <Briefcase size={14} className="text-indigo-500" />
-                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Total: {formatTimeSpent(activeTask.totalTimeSpent)}</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Tempo de Trabalho: {formatTimeSpent(activeTask.totalTimeSpent)}</span>
                       </div>
 
                       <div className="flex gap-3">
@@ -714,7 +723,7 @@ const App: React.FC = () => {
           <div className="space-y-10 animate-in fade-in duration-500">
             <div className={`${theme === 'light' ? 'bg-slate-900' : 'bg-black'} rounded-[3rem] p-10 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl border border-slate-800`}>
                <div className="text-center md:text-left">
-                  <p className="text-indigo-400 font-black uppercase tracking-widest text-xs mb-2">Economia de Recompensas</p>
+                  <p className="text-indigo-400 font-black uppercase tracking-widest text-xs mb-2">Saldo de Recompensas</p>
                   <h3 className="text-6xl font-black tabular-nums">{stats.points} <span className="text-xl text-slate-500 uppercase">pts</span></h3>
                </div>
                <div className="w-24 h-24 bg-indigo-600 rounded-3xl flex items-center justify-center rotate-6 shadow-xl"><Trophy size={48} /></div>
@@ -769,11 +778,11 @@ const App: React.FC = () => {
                       <div className={`flex items-center gap-4 ${textMuted}`}>
                         <div className="flex items-center gap-1 text-[11px] font-bold">
                           <Clock size={14} className="text-indigo-500" />
-                          <span>Focado: {formatTimeSpent(task.totalTimeSpent)}</span>
+                          <span>Tempo Focado: {formatTimeSpent(task.totalTimeSpent)}</span>
                         </div>
                         <div className="flex items-center gap-1 text-[11px] font-bold">
                           <Briefcase size={14} />
-                          <span>{task.subTasks.length} tarefas realizadas</span>
+                          <span>{task.subTasks.length} etapas feitas</span>
                         </div>
                       </div>
                     </div>
@@ -806,18 +815,18 @@ const App: React.FC = () => {
               <div className="w-24 h-24 bg-amber-400 rounded-full flex items-center justify-center mb-6 shadow-xl animate-bounce">
                 <Star size={48} className="text-white" fill="currentColor" />
               </div>
-              <h2 className="text-4xl font-black tracking-tighter mb-2">VOCÊ É IMPARÁVEL!</h2>
-              <p className={`text-lg font-bold mb-8 ${textMuted}`}>Objetivo Macro Concluído com Sucesso</p>
+              <h2 className="text-4xl font-black tracking-tighter mb-2">OBJETIVO ALCANÇADO!</h2>
+              <p className={`text-lg font-bold mb-8 ${textMuted}`}>Meta principal concluída com excelência</p>
               
               <div className="bg-indigo-600 text-white px-8 py-4 rounded-3xl flex items-center gap-3 shadow-lg shadow-indigo-900/30">
                  <Zap size={32} fill="currentColor" />
                  <div className="text-left">
-                    <span className="text-[10px] font-black uppercase tracking-widest opacity-70">Recompensa</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest opacity-70">Recompensa Extra</span>
                     <div className="text-2xl font-black leading-none">+{showCelebration.points} PONTOS</div>
                  </div>
               </div>
               
-              <p className="mt-10 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Progresso, não perfeição.</p>
+              <p className="mt-10 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Foco é a sua superpotência.</p>
            </div>
         </div>
       )}
