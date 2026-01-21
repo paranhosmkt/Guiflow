@@ -331,10 +331,13 @@ const App: React.FC = () => {
     <div className={`min-h-screen pb-20 md:pb-0 md:pl-64 flex flex-col transition-colors duration-300 ${bgMain} ${textMain}`}>
       {/* Sidebar */}
       <nav className={`fixed bottom-0 left-0 w-full h-16 ${bgCard} border-t ${borderMain} flex items-center justify-around z-50 md:top-0 md:left-0 md:w-64 md:h-full md:flex-col md:justify-start md:p-6 md:border-r shadow-2xl transition-colors duration-300`}>
-        <div className="hidden md:flex items-center justify-between mb-10 w-full">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg"><Zap size={22} fill="currentColor" /></div>
-            <h1 className="text-xl font-black tracking-tighter">GUIFLOW</h1>
+        <div className="hidden md:flex items-start justify-between mb-10 w-full">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg mt-1"><Zap size={22} fill="currentColor" /></div>
+            <div>
+              <h1 className="text-xl font-black tracking-tighter leading-none">GUIFLOW</h1>
+              <p className={`text-[10px] font-bold tracking-tight mt-1 ${textMuted}`}>Clareza para mentes inquietas</p>
+            </div>
           </div>
           <button onClick={toggleTheme} className={`p-2 rounded-xl transition-colors ${theme === 'light' ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-amber-400'}`}>
             {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
