@@ -1,6 +1,12 @@
 export type Priority = 'low' | 'medium' | 'high';
 export type TaskStatus = 'todo' | 'doing' | 'done';
 
+export interface ProjectLink {
+  id: string;
+  title: string;
+  url: string;
+}
+
 export interface SubTask {
   id: string;
   title: string;
@@ -25,6 +31,7 @@ export interface Task {
   rewardPoints: number; // Bonus points for completing the whole macro project
   totalTimeSpent?: number; // Total focused time in minutes
   completedAt?: string; // ISO string date
+  links?: ProjectLink[]; // Links para documentos, escopos, etc.
 }
 
 export interface Reward {

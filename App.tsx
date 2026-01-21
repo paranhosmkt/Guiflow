@@ -32,10 +32,15 @@ import {
   Info,
   Save,
   Star,
-  BellRing
+  BellRing,
+  BatteryLow,
+  BatteryMedium,
+  BatteryFull,
+  Link2,
+  ExternalLink
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Task, UserStats, Reward, SubTask, TaskStatus } from './types';
+import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink } from './types';
 
 // Constantes para LocalStorage
 const STORAGE_KEYS = {
@@ -68,6 +73,12 @@ const INITIAL_REWARDS: Reward[] = [
   { id: 'r3', title: 'Episódio de série', cost: 300, icon: '📺' },
 ];
 
+const COMPLEXITY_LEVELS = [
+  { id: 'simple', label: 'Simples', points: 5, icon: <BatteryLow size={14} />, example: 'Ex: Responder e-mail, lavar louça' },
+  { id: 'medium', label: 'Intermediária', points: 10, icon: <BatteryMedium size={14} />, example: 'Ex: Cadastro no sistema, relatório' },
+  { id: 'complex', label: 'Complexa', points: 20, icon: <BatteryFull size={14} />, example: 'Ex: Resolver bug difícil, estudar' }
+];
+
 // Utilitário para gerar som sem arquivos externos
 const playAlertSound = (type: 'work-end' | 'break-end') => {
   try {
@@ -79,12 +90,10 @@ const playAlertSound = (type: 'work-end' | 'break-end') => {
     gainNode.connect(audioCtx.destination);
 
     if (type === 'work-end') {
-      // Notas ascendentes alegres
       oscillator.type = 'sine';
       oscillator.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
       oscillator.frequency.exponentialRampToValueAtTime(1046.50, audioCtx.currentTime + 0.5); // C6
     } else {
-      // Notas suaves descendentes para voltar ao foco
       oscillator.type = 'triangle';
       oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
       oscillator.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.5); // A4
@@ -101,7 +110,6 @@ const playAlertSound = (type: 'work-end' | 'break-end') => {
 };
 
 const App: React.FC = () => {
-  // Estados com carregamento do LocalStorage
   const [tasks, setTasks] = useState<Task[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.TASKS);
     return saved ? JSON.parse(saved) : [];
@@ -133,7 +141,6 @@ const App: React.FC = () => {
   const [draggedSubTaskId, setDraggedSubTaskId] = useState<string | null>(null);
   const [showCelebration, setShowCelebration] = useState<{points: number} | null>(null);
 
-  // Pomodoro Timer - Nova lógica de alta precisão
   const [timerSeconds, setTimerSeconds] = useState(25 * 60);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [timerMode, setTimerMode] = useState<'work' | 'break'>('work');
@@ -144,21 +151,18 @@ const App: React.FC = () => {
   const timerRef = useRef<number | null>(null);
   const lastTickRef = useRef<number>(0);
 
-  // Modais
-  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | null>(null);
+  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | null>(null);
 
-  // Forms
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
   const [newTaskDate, setNewTaskDate] = useState("");
-  const [taskToProject, setTaskToProject] = useState({ title: "", notes: "", points: 20, projectId: "", dueDate: "" });
+  const [taskToProject, setTaskToProject] = useState({ title: "", notes: "", points: 5, projectId: "", dueDate: "" });
   const [newReward, setNewReward] = useState({ title: "", cost: 50, icon: "🎁" });
+  const [newLink, setNewLink] = useState({ title: "", url: "" });
 
-  // Edição
   const [editingMacro, setEditingMacro] = useState<Task | null>(null);
   const [editingSubTask, setEditingSubTask] = useState<{taskId: string, subTask: SubTask} | null>(null);
 
-  // Sincronização LocalStorage
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks)); }, [tasks]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.COMPLETED_TASKS, JSON.stringify(completedTasks)); }, [completedTasks]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.REWARDS, JSON.stringify(rewards)); }, [rewards]);
@@ -170,7 +174,6 @@ const App: React.FC = () => {
     setMotivation(randomQuote);
   }, [stats.tasksCompleted, view]);
 
-  // Função auxiliar de ordenação por data
   const sortByDueDate = (a: { dueDate?: string }, b: { dueDate?: string }) => {
     if (!a.dueDate && !b.dueDate) return 0;
     if (!a.dueDate) return 1;
@@ -178,16 +181,13 @@ const App: React.FC = () => {
     return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
   };
 
-  // Timer Logic - Wall Clock Precision para background tabs
   useEffect(() => {
     if (isTimerActive && timerSeconds > 0) {
       lastTickRef.current = Date.now();
-      
       timerRef.current = window.setInterval(() => {
         const now = Date.now();
         const delta = now - lastTickRef.current;
         const secondsToSubtract = Math.floor(delta / 1000);
-        
         if (secondsToSubtract >= 1) {
           setTimerSeconds(prev => Math.max(0, prev - secondsToSubtract));
           lastTickRef.current += secondsToSubtract * 1000;
@@ -215,19 +215,13 @@ const App: React.FC = () => {
   const handleTimerComplete = () => {
     setIsTimerActive(false);
     if (timerRef.current) clearInterval(timerRef.current);
-    
     setTimerFlash(true);
     setTimeout(() => setTimerFlash(false), 3000);
 
     if (timerMode === 'work') {
       const nextCycles = cyclesCompleted + 1;
       setCyclesCompleted(nextCycles);
-      
-      // NOTA: Removida a atribuição automática de 15 pontos aqui.
-      // Agora o usuário ganha pontos apenas por tarefas ou conclusão de objetivo.
-      
       playAlertSound('work-end');
-
       const targetTaskId = timerBoundTaskId || activeTaskId;
       if (targetTaskId) {
         setTasks(prev => prev.map(t => 
@@ -236,7 +230,6 @@ const App: React.FC = () => {
             : t
         ));
       }
-
       setTimerMode('break');
       if (nextCycles % 6 === 0) {
         setTimerSeconds(45 * 60); 
@@ -267,7 +260,8 @@ const App: React.FC = () => {
       completed: false,
       subTasks: [],
       rewardPoints: 50,
-      totalTimeSpent: 0
+      totalTimeSpent: 0,
+      links: []
     };
     setTasks([...tasks, newTask]);
     setNewTaskTitle("");
@@ -318,8 +312,44 @@ const App: React.FC = () => {
     };
 
     setTasks(prev => prev.map(t => t.id === targetId ? { ...t, subTasks: [...t.subTasks, newSub] } : t));
-    setTaskToProject({ title: "", notes: "", points: 20, projectId: "", dueDate: "" });
+    setTaskToProject({ title: "", notes: "", points: 5, projectId: "", dueDate: "" });
     setActiveModal(null);
+  };
+
+  const handleAddLink = () => {
+    if (!newLink.title.trim() || !newLink.url.trim() || !activeTaskId) return;
+    
+    // Add http:// if missing
+    let url = newLink.url.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      url = 'https://' + url;
+    }
+
+    const link: ProjectLink = {
+      id: Date.now().toString(),
+      title: newLink.title.trim(),
+      url
+    };
+
+    setTasks(prev => prev.map(t => {
+      if (t.id === activeTaskId) {
+        return { ...t, links: [...(t.links || []), link] };
+      }
+      return t;
+    }));
+
+    setNewLink({ title: "", url: "" });
+    setActiveModal(null);
+  };
+
+  const handleDeleteLink = (linkId: string) => {
+    if (!activeTaskId) return;
+    setTasks(prev => prev.map(t => {
+      if (t.id === activeTaskId) {
+        return { ...t, links: (t.links || []).filter(l => l.id !== linkId) };
+      }
+      return t;
+    }));
   };
 
   const handleOpenEditSubTask = (taskId: string, subTask: SubTask, e: React.MouseEvent) => {
@@ -352,16 +382,8 @@ const App: React.FC = () => {
             if (st.id === subId) {
               const wasDone = st.status === 'done';
               const isNowDone = newStatus === 'done';
-              
-              // Pontuação ganha apenas ao mover para Concluído
-              if (!wasDone && isNowDone) {
-                setStats(s => ({ ...s, points: s.points + st.rewardPoints }));
-              }
-              // Pontuação perdida se tirar do Concluído (evita trapaça)
-              if (wasDone && !isNowDone) {
-                setStats(s => ({ ...s, points: Math.max(0, s.points - st.rewardPoints) }));
-              }
-              
+              if (!wasDone && isNowDone) setStats(s => ({ ...s, points: s.points + st.rewardPoints }));
+              if (wasDone && !isNowDone) setStats(s => ({ ...s, points: Math.max(0, s.points - st.rewardPoints) }));
               return { ...st, status: newStatus, completed: isNowDone };
             }
             return st;
@@ -376,10 +398,7 @@ const App: React.FC = () => {
     if (confirm("Remover esta etapa da lista?")) {
       setTasks(prev => prev.map(t => {
         if (t.id === taskId) {
-          return {
-            ...t,
-            subTasks: t.subTasks.filter(st => st.id !== subId)
-          };
+          return { ...t, subTasks: t.subTasks.filter(st => st.id !== subId) };
         }
         return t;
       }));
@@ -389,17 +408,13 @@ const App: React.FC = () => {
   const finishMacroProject = (id: string) => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
-    
     const finalizedTask: Task = {
       ...task,
       status: 'done',
       completed: true,
       completedAt: new Date().toISOString()
     };
-
     triggerCelebration(task.rewardPoints);
-
-    // Pontuação ganha ao finalizar o objetivo macro
     setStats(s => ({ ...s, points: s.points + task.rewardPoints, tasksCompleted: s.tasksCompleted + 1 }));
     setCompletedTasks([finalizedTask, ...completedTasks]);
     setTasks(prev => prev.filter(t => t.id !== id));
@@ -557,7 +572,7 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        {/* Views */}
+        {/* Render Views */}
         {view === 'global' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
             {tasks
@@ -575,12 +590,10 @@ const App: React.FC = () => {
                   isOverdue={isOverdue} 
                 />
             ))}
-            
             {tasks.filter(t => !t.completed).length === 0 && (
               <div className={`col-span-full py-24 text-center ${bgCard} rounded-[3rem] border-2 border-dashed ${borderMain} flex flex-col items-center`}>
                  <div className={`w-20 h-20 ${theme === 'light' ? 'bg-slate-50' : 'bg-slate-800'} rounded-full flex items-center justify-center mb-4`}><AlertCircle size={40} className="text-slate-400" /></div>
                  <h3 className={`text-xl font-black ${textMuted} mb-2`}>Sem objetivos ativos.</h3>
-                 <p className={`${textMuted} mb-8 max-w-xs`}>Que tal criar seu primeiro objetivo macro agora?</p>
                  <button onClick={() => setActiveModal('macro')} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black">Começar Agora</button>
               </div>
             )}
@@ -592,9 +605,8 @@ const App: React.FC = () => {
             {activeTask ? (
               <>
                 <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
-                  {/* Project Summary Card */}
                   <div className={`${bgCard} xl:col-span-3 p-8 rounded-[3rem] border ${borderCard} shadow-sm transition-all`}>
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
                       <div className="flex-1">
                         <div className="flex flex-wrap gap-2 mb-3">
                           <button onClick={() => setView('global')} className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-colors ${theme === 'light' ? 'bg-slate-100 text-slate-500 hover:bg-slate-200' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
@@ -606,17 +618,39 @@ const App: React.FC = () => {
                               <Calendar size={10} /> Prazo: {formatDate(activeTask.dueDate)}
                             </span>
                           )}
-                          <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${theme === 'light' ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-300'}`}>
-                            <Clock size={10} /> Focado: {formatTimeSpent(activeTask.totalTimeSpent)}
-                          </span>
                         </div>
                         <h2 className="text-3xl md:text-4xl font-black mb-2 leading-tight">{activeTask.title}</h2>
-                        {activeTask.description && (
-                          <p className={`mb-4 italic text-sm ${textMuted}`}>"{activeTask.description}"</p>
-                        )}
-                        <p className={textMuted}>Organize as micro-tarefas para atingir seu objetivo principal.</p>
+                        {activeTask.description && <p className={`mb-6 italic text-sm ${textMuted}`}>"{activeTask.description}"</p>}
+                        
+                        {/* Seção de Links */}
+                        <div className="mt-8">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="text-[11px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
+                              <Link2 size={14} /> Links e Referências
+                            </h4>
+                            <button onClick={() => setActiveModal('link')} className={`p-2 rounded-xl transition-all ${theme === 'light' ? 'bg-slate-100 text-slate-600 hover:bg-indigo-600 hover:text-white' : 'bg-slate-800 text-slate-400 hover:bg-indigo-600 hover:text-white'}`}>
+                              <Plus size={16} />
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap gap-3">
+                            {activeTask.links && activeTask.links.length > 0 ? (
+                              activeTask.links.map(link => (
+                                <div key={link.id} className={`group flex items-center gap-3 px-4 py-2.5 rounded-2xl border transition-all ${theme === 'light' ? 'bg-slate-50 border-slate-100 hover:border-indigo-200' : 'bg-slate-800/50 border-slate-700 hover:border-indigo-500/50'}`}>
+                                  <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 font-bold text-sm">
+                                    <span className="max-w-[150px] truncate">{link.title}</span>
+                                    <ExternalLink size={12} className="opacity-40 group-hover:opacity-100" />
+                                  </a>
+                                  <button onClick={() => handleDeleteLink(link.id)} className="p-1 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100">
+                                    <X size={12} />
+                                  </button>
+                                </div>
+                              ))
+                            ) : (
+                              <p className={`text-[10px] font-medium italic ${textMuted}`}>Nenhum recurso anexado.</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      
                       <button 
                         onClick={() => finishMacroProject(activeTask.id)} 
                         className={`whitespace-nowrap px-8 py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-xl ${isProjectReadyToFinish ? 'scale-110' : ''} ${theme === 'light' ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-indigo-600 text-white shadow-indigo-900/40'} ${!isProjectReadyToFinish ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105 active:scale-95'}`}
@@ -626,48 +660,28 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Pomodoro Timer & Quick Actions */}
                   <div className="xl:col-span-1 flex flex-col gap-4">
                     <div className={`p-6 md:p-8 rounded-[3rem] border-2 shadow-sm flex flex-col items-center justify-center transition-all relative overflow-hidden ${timerFlash ? 'animate-pulse scale-105' : ''} ${timerMode === 'work' ? (theme === 'light' ? 'bg-rose-50 border-rose-100' : 'bg-rose-950/20 border-rose-900/50') : (theme === 'light' ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-950/20 border-emerald-900/50')}`}>
-                      <div className={`absolute top-4 right-6 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${theme === 'light' ? 'bg-white/50 text-slate-500' : 'bg-black/20 text-slate-400'}`}>
-                        Ciclo {(cyclesCompleted % 6) + 1}/6
-                      </div>
                       <div className="flex items-center gap-2 mb-2">
                          {timerMode === 'work' ? <Timer className="text-rose-500" size={16} /> : <Coffee className="text-emerald-500" size={16} />}
-                         <span className={`text-[10px] font-black uppercase tracking-widest ${timerMode === 'work' ? 'text-rose-500' : (cyclesCompleted % 6 === 0 && cyclesCompleted > 0 ? 'Descanso Longo' : 'Pausa')}`}>
-                           {timerMode === 'work' ? 'Foco Profundo' : (cyclesCompleted % 6 === 0 && cyclesCompleted > 0 ? 'Descanso Longo' : 'Pausa')}
+                         <span className={`text-[10px] font-black uppercase tracking-widest ${timerMode === 'work' ? 'text-rose-500' : 'Pausa'}`}>
+                           {timerMode === 'work' ? 'Foco Profundo' : 'Pausa'}
                          </span>
                       </div>
                       <div className="text-5xl font-black tabular-nums tracking-tighter mb-4">{Math.floor(timerSeconds / 60).toString().padStart(2, '0')}:{(timerSeconds % 60).toString().padStart(2, '0')}</div>
-                      
-                      {/* Contador de Tempo Acumulado na Atividade */}
-                      <div className={`mb-6 flex items-center gap-2 px-4 py-2 rounded-2xl ${theme === 'light' ? 'bg-white/40' : 'bg-black/20'}`}>
-                        <Briefcase size={14} className="text-indigo-500" />
-                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Tempo de Trabalho: {formatTimeSpent(activeTask.totalTimeSpent)}</span>
-                      </div>
-
                       <div className="flex gap-3">
                          <button onClick={toggleTimer} className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${timerMode === 'work' ? 'bg-rose-600 shadow-rose-900/20' : 'bg-emerald-600 shadow-emerald-900/20'} hover:scale-110 active:scale-90 transition-all`}>
                            {isTimerActive ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
                          </button>
-                         <button onClick={() => { setIsTimerActive(false); setTimerSeconds(25 * 60); setTimerMode('work'); setCyclesCompleted(0); setTimerBoundTaskId(null); }} className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition-all shadow-sm ${theme === 'light' ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}><RotateCcw size={20} /></button>
+                         <button onClick={() => { setIsTimerActive(false); setTimerSeconds(25 * 60); setTimerMode('work'); setCyclesCompleted(0); }} className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition-all shadow-sm ${theme === 'light' ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}><RotateCcw size={20} /></button>
                       </div>
-                      
-                      {isTimerActive && timerBoundTaskId && (
-                        <div className="mt-4 flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping" />
-                          <span className="text-[8px] font-black uppercase tracking-tighter opacity-40">Contabilizando tempo real...</span>
-                        </div>
-                      )}
                     </div>
-                    {/* Botão de Nova Tarefa */}
                     <button onClick={() => setActiveModal('task')} className="bg-emerald-600 text-white px-6 py-4 rounded-[2rem] font-black shadow-lg shadow-emerald-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
                       <PlusCircle size={22} /> Nova micro-tarefa
                     </button>
                   </div>
                 </div>
 
-                {/* Kanban Board */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-h-[500px]">
                   <KanbanCol 
                     title="A Fazer" 
@@ -711,8 +725,6 @@ const App: React.FC = () => {
             ) : (
               <div className={`text-center py-32 ${bgCard} rounded-[3rem] border-2 border-dashed ${borderMain}`}>
                 <Target size={54} className="text-slate-200 mx-auto mb-6" />
-                <h3 className={`text-xl font-black ${textMuted} mb-2`}>Nenhum foco selecionado.</h3>
-                <p className={`${textMuted} mb-8`}>Volte para a visão Geral e selecione um objetivo para detalhar.</p>
                 <button onClick={() => setView('global')} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black">Ver Objetivos</button>
               </div>
             )}
@@ -722,13 +734,12 @@ const App: React.FC = () => {
         {view === 'rewards' && (
           <div className="space-y-10 animate-in fade-in duration-500">
             <div className={`${theme === 'light' ? 'bg-slate-900' : 'bg-black'} rounded-[3rem] p-10 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl border border-slate-800`}>
-               <div className="text-center md:text-left">
+               <div>
                   <p className="text-indigo-400 font-black uppercase tracking-widest text-xs mb-2">Saldo de Recompensas</p>
                   <h3 className="text-6xl font-black tabular-nums">{stats.points} <span className="text-xl text-slate-500 uppercase">pts</span></h3>
                </div>
                <div className="w-24 h-24 bg-indigo-600 rounded-3xl flex items-center justify-center rotate-6 shadow-xl"><Trophy size={48} /></div>
             </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {rewards.map(reward => (
                 <div key={reward.id} className={`${bgCard} p-8 rounded-[2.5rem] border-2 transition-all relative group flex flex-col justify-between ${stats.points >= reward.cost ? 'border-indigo-600/20 shadow-md' : `${borderCard} opacity-60`}`}>
@@ -759,38 +770,20 @@ const App: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {completedTasks.map(task => (
                   <div key={task.id} className={`${bgCard} p-8 rounded-[3rem] border ${borderCard} shadow-sm flex flex-col justify-between group relative`}>
-                    <button 
-                      onClick={() => handleDeleteHistoryTask(task.id)} 
-                      className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <button onClick={() => handleDeleteHistoryTask(task.id)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
                     <div>
                       <div className="flex items-center justify-between mb-4">
-                        <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full flex items-center gap-1">
-                          <CheckCircle2 size={10} /> Concluído
-                        </span>
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>
-                          {task.completedAt ? new Date(task.completedAt).toLocaleDateString('pt-BR') : '-'}
-                        </span>
+                        <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full flex items-center gap-1"><CheckCircle2 size={10} /> Concluído</span>
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>{task.completedAt ? new Date(task.completedAt).toLocaleDateString('pt-BR') : '-'}</span>
                       </div>
                       <h3 className="text-xl font-black mb-3 pr-8">{task.title}</h3>
                       <div className={`flex items-center gap-4 ${textMuted}`}>
-                        <div className="flex items-center gap-1 text-[11px] font-bold">
-                          <Clock size={14} className="text-indigo-500" />
-                          <span>Tempo Focado: {formatTimeSpent(task.totalTimeSpent)}</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-[11px] font-bold">
-                          <Briefcase size={14} />
-                          <span>{task.subTasks.length} etapas feitas</span>
-                        </div>
+                        <div className="flex items-center gap-1 text-[11px] font-bold"><Clock size={14} className="text-indigo-500" /><span>Tempo Focado: {formatTimeSpent(task.totalTimeSpent)}</span></div>
                       </div>
                     </div>
                     <div className={`mt-6 pt-6 border-t ${borderCard} flex items-center justify-between`}>
                        <span className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>Recompensa Ganha:</span>
-                       <div className="flex items-center gap-1 text-indigo-500 font-black">
-                         <Zap size={14} fill="currentColor" /> +{task.rewardPoints} pts
-                       </div>
+                       <div className="flex items-center gap-1 text-indigo-500 font-black"><Zap size={14} fill="currentColor" /> +{task.rewardPoints} pts</div>
                     </div>
                   </div>
                 ))}
@@ -798,8 +791,6 @@ const App: React.FC = () => {
             ) : (
               <div className={`text-center py-32 ${bgCard} rounded-[3rem] border-2 border-dashed ${borderMain}`}>
                 <History size={54} className="text-slate-200 mx-auto mb-6" />
-                <h3 className={`text-xl font-black ${textMuted} mb-2`}>Histórico vazio.</h3>
-                <p className={`${textMuted} mb-8`}>Conclua seu primeiro objetivo macro para vê-lo aqui!</p>
                 <button onClick={() => setView('global')} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black">Ver Objetivos</button>
               </div>
             )}
@@ -807,31 +798,22 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Overlay de Celebração */}
+      {/* Celebration Overlay */}
       {showCelebration && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
            <div className="absolute inset-0 bg-indigo-950/40 backdrop-blur-md animate-in fade-in duration-300" />
            <div className={`relative p-12 rounded-[4rem] text-center shadow-2xl animate-in zoom-in-95 duration-500 flex flex-col items-center border ${theme === 'light' ? 'bg-white border-white' : 'bg-slate-900 border-slate-800'}`}>
-              <div className="w-24 h-24 bg-amber-400 rounded-full flex items-center justify-center mb-6 shadow-xl animate-bounce">
-                <Star size={48} className="text-white" fill="currentColor" />
-              </div>
+              <div className="w-24 h-24 bg-amber-400 rounded-full flex items-center justify-center mb-6 shadow-xl animate-bounce"><Star size={48} className="text-white" fill="currentColor" /></div>
               <h2 className="text-4xl font-black tracking-tighter mb-2">OBJETIVO ALCANÇADO!</h2>
-              <p className={`text-lg font-bold mb-8 ${textMuted}`}>Meta principal concluída com excelência</p>
-              
               <div className="bg-indigo-600 text-white px-8 py-4 rounded-3xl flex items-center gap-3 shadow-lg shadow-indigo-900/30">
                  <Zap size={32} fill="currentColor" />
-                 <div className="text-left">
-                    <span className="text-[10px] font-black uppercase tracking-widest opacity-70">Recompensa Extra</span>
-                    <div className="text-2xl font-black leading-none">+{showCelebration.points} PONTOS</div>
-                 </div>
+                 <div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest opacity-70">Recompensa Extra</span><div className="text-2xl font-black leading-none">+{showCelebration.points} PONTOS</div></div>
               </div>
-              
-              <p className="mt-10 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Foco é a sua superpotência.</p>
            </div>
         </div>
       )}
 
-      {/* Modais */}
+      {/* Modals */}
       {activeModal === 'macro' && (
         <Modal title="Novo Objetivo Macro" onClose={() => setActiveModal(null)} theme={theme}>
           <div className="space-y-6">
@@ -840,14 +822,14 @@ const App: React.FC = () => {
               <input autoFocus value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} placeholder="Ex: Organizar o Escritório" className={`w-full p-4 border-2 rounded-2xl font-bold text-lg outline-none focus:border-indigo-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
-              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Contexto ou Comentário (Opcional)</label>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Contexto (Opcional)</label>
               <textarea value={newTaskDescription} onChange={e => setNewTaskDescription(e.target.value)} placeholder="Por que isso é importante?" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 resize-none h-24 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo Final</label>
               <input type="date" value={newTaskDate} onChange={e => setNewTaskDate(e.target.value)} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
-            <button onClick={handleCreateMacro} disabled={!newTaskTitle.trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-indigo-900/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50">Começar Projeto</button>
+            <button onClick={handleCreateMacro} disabled={!newTaskTitle.trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-indigo-900/20 hover:scale-[1.02] transition-all disabled:opacity-50">Começar Projeto</button>
           </div>
         </Modal>
       )}
@@ -859,27 +841,51 @@ const App: React.FC = () => {
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>O que precisa ser feito?</label>
               <input autoFocus value={taskToProject.title} onChange={e => setTaskToProject({...taskToProject, title: e.target.value})} placeholder="Ex: Tirar o lixo da mesa" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
+            
             <div>
-              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Observação ou Dica (Opcional)</label>
-              <textarea value={taskToProject.notes} onChange={e => setTaskToProject({...taskToProject, notes: e.target.value})} placeholder="Algo para não esquecer..." className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 resize-none h-24 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-4 block ${textMuted}`}>Nível de Esforço</label>
+              <div className="grid grid-cols-1 gap-3">
+                {COMPLEXITY_LEVELS.map((level) => (
+                  <button
+                    key={level.id}
+                    onClick={() => setTaskToProject({ ...taskToProject, points: level.points })}
+                    className={`p-4 rounded-2xl border-2 transition-all text-left flex items-start gap-4 ${
+                      taskToProject.points === level.points 
+                        ? (theme === 'light' ? 'border-indigo-600 bg-indigo-50 shadow-sm' : 'border-indigo-400 bg-indigo-900/20 shadow-sm') 
+                        : (theme === 'light' ? 'border-slate-100 bg-slate-50 hover:border-slate-200' : 'border-slate-800 bg-slate-800 hover:border-slate-700')
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl ${taskToProject.points === level.points ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-400'}`}>
+                      {level.icon}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-center mb-0.5">
+                        <span className="font-bold text-sm">{level.label}</span>
+                        <span className={`text-[10px] font-black ${taskToProject.points === level.points ? 'text-indigo-500' : 'text-slate-400'}`}>+{level.points} PTS</span>
+                      </div>
+                      <p className={`text-[10px] opacity-60 leading-tight ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>{level.example}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
+
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo da Tarefa (Opcional)</label>
               <input type="date" value={taskToProject.dueDate} onChange={e => setTaskToProject({...taskToProject, dueDate: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
-            <div className={`flex justify-between items-center p-4 rounded-2xl ${theme === 'light' ? 'bg-slate-50' : 'bg-slate-800'}`}>
-              <span className={`text-xs font-black uppercase tracking-widest ${textMuted}`}>Valor da Recompensa:</span>
-              <div className="flex items-center gap-2">
-                <input type="number" value={taskToProject.points} onChange={e => setTaskToProject({...taskToProject, points: parseInt(e.target.value) || 0})} className={`w-16 p-2 text-center border-2 font-black rounded-xl text-indigo-500 outline-none ${theme === 'light' ? 'bg-white border-slate-100' : 'bg-slate-900 border-slate-700'}`} />
-                <span className={`text-xs font-bold ${textMuted}`}>pts</span>
-              </div>
+
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Observação (Opcional)</label>
+              <textarea value={taskToProject.notes} onChange={e => setTaskToProject({...taskToProject, notes: e.target.value})} placeholder="Algo para não esquecer..." className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 resize-none h-20 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
+
             <button onClick={handleAddTaskToProject} disabled={!taskToProject.title.trim()} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-900/20 hover:scale-[1.02] transition-all disabled:opacity-50">Adicionar à Lista</button>
           </div>
         </Modal>
       )}
 
-      {/* Modais de Edição */}
+      {/* Edit Modals */}
       {activeModal === 'edit-macro' && editingMacro && (
         <Modal title="Editar Objetivo" onClose={() => { setActiveModal(null); setEditingMacro(null); }} theme={theme}>
           <div className="space-y-6">
@@ -888,14 +894,10 @@ const App: React.FC = () => {
               <input autoFocus value={editingMacro.title} onChange={e => setEditingMacro({...editingMacro, title: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold text-lg outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
-              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Contexto ou Comentário</label>
-              <textarea value={editingMacro.description} onChange={e => setEditingMacro({...editingMacro, description: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 resize-none h-24 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
-            </div>
-            <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo Final</label>
               <input type="date" value={editingMacro.dueDate} onChange={e => setEditingMacro({...editingMacro, dueDate: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
-            <button onClick={handleUpdateMacro} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"><Save size={20} /> Salvar Alterações</button>
+            <button onClick={handleUpdateMacro} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl transition-all">Salvar Alterações</button>
           </div>
         </Modal>
       )}
@@ -907,22 +909,49 @@ const App: React.FC = () => {
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Título da Tarefa</label>
               <input autoFocus value={editingSubTask.subTask.title} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, title: e.target.value}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
+            
             <div>
-              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Observação ou Dica</label>
-              <textarea value={editingSubTask.subTask.notes || ""} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, notes: e.target.value}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 resize-none h-24 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-4 block ${textMuted}`}>Nível de Esforço</label>
+              <div className="grid grid-cols-1 gap-2">
+                {COMPLEXITY_LEVELS.map((level) => (
+                  <button
+                    key={level.id}
+                    onClick={() => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, rewardPoints: level.points}})}
+                    className={`p-3 rounded-2xl border-2 transition-all text-left flex items-center gap-3 ${
+                      editingSubTask.subTask.rewardPoints === level.points 
+                        ? (theme === 'light' ? 'border-indigo-600 bg-indigo-50' : 'border-indigo-400 bg-indigo-900/20') 
+                        : (theme === 'light' ? 'border-slate-100 bg-slate-50' : 'border-slate-800 bg-slate-800')
+                    }`}
+                  >
+                    <div className="flex-1 font-bold text-sm">{level.label}</div>
+                    <div className="text-[10px] font-black text-indigo-500">+{level.points} PTS</div>
+                  </button>
+                ))}
+              </div>
             </div>
+
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo (Opcional)</label>
               <input type="date" value={editingSubTask.subTask.dueDate || ""} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, dueDate: e.target.value}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
-            <div className={`flex justify-between items-center p-4 rounded-2xl ${theme === 'light' ? 'bg-slate-50' : 'bg-slate-800'}`}>
-              <span className={`text-xs font-black uppercase tracking-widest ${textMuted}`}>Recompensa:</span>
-              <div className="flex items-center gap-2">
-                <input type="number" value={editingSubTask.subTask.rewardPoints} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, rewardPoints: parseInt(e.target.value) || 0}})} className={`w-16 p-2 text-center border-2 font-black rounded-xl text-indigo-500 outline-none ${theme === 'light' ? 'bg-white border-slate-100' : 'bg-slate-900 border-slate-700'}`} />
-                <span className={`text-xs font-bold ${textMuted}`}>pts</span>
-              </div>
+
+            <button onClick={handleUpdateSubTask} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl transition-all"><Save size={20} className="inline mr-2" /> Atualizar Tarefa</button>
+          </div>
+        </Modal>
+      )}
+
+      {activeModal === 'link' && (
+        <Modal title="Anexar Link de Referência" onClose={() => setActiveModal(null)} theme={theme}>
+          <div className="space-y-6">
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Nome do Link (ex: Documento de Escopo)</label>
+              <input autoFocus value={newLink.title} onChange={e => setNewLink({...newLink, title: e.target.value})} placeholder="Ex: Referência Visual" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
-            <button onClick={handleUpdateSubTask} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"><Save size={20} /> Atualizar Tarefa</button>
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>URL (Link Completo)</label>
+              <input value={newLink.url} onChange={e => setNewLink({...newLink, url: e.target.value})} placeholder="Ex: google.com" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+            <button onClick={handleAddLink} disabled={!newLink.title.trim() || !newLink.url.trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl active:scale-95 transition-all disabled:opacity-50">Salvar Link</button>
           </div>
         </Modal>
       )}
@@ -930,32 +959,14 @@ const App: React.FC = () => {
       {activeModal === 'reward' && (
         <Modal title="Criar Recompensa" onClose={() => setActiveModal(null)} theme={theme}>
           <div className="space-y-6">
-             <div>
-               <label className={`text-[10px] font-black uppercase tracking-widest mb-3 block text-center ${textMuted}`}>Escolha um Ícone</label>
-               <div className={`grid grid-cols-6 gap-2 p-4 rounded-3xl max-h-40 overflow-y-auto ${theme === 'light' ? 'bg-slate-50' : 'bg-slate-800'}`}>
-                 {EMOJI_OPTIONS.map(emoji => (
-                   <button 
-                    key={emoji} 
-                    onClick={() => setNewReward({...newReward, icon: emoji})}
-                    className={`text-2xl p-2 rounded-xl transition-all ${newReward.icon === emoji ? `${theme === 'light' ? 'bg-white shadow-md border-purple-200' : 'bg-slate-700 border-purple-500'} scale-110 border-2` : 'hover:bg-black/5'}`}
-                   >
-                     {emoji}
-                   </button>
-                 ))}
-               </div>
+             <div className={`grid grid-cols-6 gap-2 p-4 rounded-3xl max-h-40 overflow-y-auto ${theme === 'light' ? 'bg-slate-50' : 'bg-slate-800'}`}>
+               {EMOJI_OPTIONS.map(emoji => (
+                 <button key={emoji} onClick={() => setNewReward({...newReward, icon: emoji})} className={`text-2xl p-2 rounded-xl transition-all ${newReward.icon === emoji ? 'bg-white shadow-md scale-110 border-2 border-purple-200' : 'hover:bg-black/5'}`}>{emoji}</button>
+               ))}
              </div>
-             
-             <div>
-                <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Nome do Prêmio</label>
-                <input autoFocus value={newReward.title} onChange={e => setNewReward({...newReward, title: e.target.value})} placeholder="Ex: Assistir Anime" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-purple-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
-             </div>
-             
-             <div>
-               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block text-center ${textMuted}`}>Custo em Pontos</label>
-               <input type="number" value={newReward.cost} onChange={e => setNewReward({...newReward, cost: parseInt(e.target.value) || 0})} className={`w-full p-4 border-2 rounded-2xl font-black text-center text-2xl text-purple-500 outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`} />
-             </div>
-             
-             <button onClick={handleCreateReward} disabled={!newReward.title.trim()} className="w-full bg-purple-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-purple-900/20 active:scale-95 transition-all">Criar Prêmio</button>
+             <input autoFocus value={newReward.title} onChange={e => setNewReward({...newReward, title: e.target.value})} placeholder="Nome do Prêmio" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-purple-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+             <input type="number" value={newReward.cost} onChange={e => setNewReward({...newReward, cost: parseInt(e.target.value) || 0})} className={`w-full p-4 border-2 rounded-2xl font-black text-center text-2xl text-purple-500 outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`} />
+             <button onClick={handleCreateReward} disabled={!newReward.title.trim()} className="w-full bg-purple-600 text-white font-black py-5 rounded-2xl shadow-xl transition-all">Criar Prêmio</button>
           </div>
         </Modal>
       )}
@@ -963,14 +974,12 @@ const App: React.FC = () => {
   );
 };
 
-// UI Components
 const NavItem = ({ active, onClick, icon, label, theme }: any) => {
   const isActive = active;
   const isLight = theme === 'light';
-  
   return (
     <button onClick={onClick} className={`flex flex-col md:flex-row items-center gap-1 md:gap-4 w-full px-4 py-2 md:py-4 rounded-2xl transition-all ${isActive ? (isLight ? 'text-indigo-600 bg-indigo-50 font-black' : 'text-indigo-400 bg-indigo-950/30 font-black') : (isLight ? 'text-slate-400 hover:text-slate-600 hover:bg-slate-50' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50')}`}>
-      <div className={`${isActive ? 'scale-110' : 'scale-100'} transition-transform`}>{icon}</div>
+      {icon}
       <span className="text-[9px] md:text-sm uppercase md:capitalize font-bold tracking-tight">{label}</span>
     </button>
   );
@@ -981,7 +990,6 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, the
   const total = task.subTasks.length;
   const pct = total > 0 ? (completed / total) * 100 : 0;
   const isLight = theme === 'light';
-
   return (
     <div onClick={onFocus} className={`p-8 rounded-[3rem] border-2 transition-all cursor-pointer shadow-sm group relative flex flex-col justify-between h-72 ${isLight ? 'bg-white border-slate-50 hover:border-indigo-100' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/30'}`}>
       <div className="absolute top-6 right-6 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -998,9 +1006,6 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, the
           )}
         </div>
         <h3 className={`text-xl font-black leading-tight group-hover:text-indigo-500 transition-colors line-clamp-2 pr-12 ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>{task.title}</h3>
-        {task.description && (
-          <p className={`text-[11px] mt-2 line-clamp-2 italic ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>{task.description}</p>
-        )}
       </div>
       <div className="mt-auto pt-6">
         <div className="flex justify-between items-end mb-2">
@@ -1008,7 +1013,7 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, the
           <span className="text-sm font-black text-indigo-500">{Math.round(pct)}%</span>
         </div>
         <div className={`w-full h-3 rounded-full overflow-hidden p-0.5 border ${isLight ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`}>
-          <div className="h-full bg-indigo-600 rounded-full transition-all duration-700 ease-out shadow-[0_0_8px_rgba(79,70,229,0.4)]" style={{ width: `${pct}%` }} />
+          <div className="h-full bg-indigo-600 rounded-full transition-all duration-700 ease-out" style={{ width: `${pct}%` }} />
         </div>
       </div>
     </div>
@@ -1017,7 +1022,6 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, the
 
 const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTask, onDeleteSubTask, formatDate, isOverdue, highlight, theme }: any) => {
   const isLight = theme === 'light';
-  
   return (
     <div className={`flex flex-col h-full rounded-[3rem] p-5 border-2 border-dashed ${highlight ? (isLight ? 'bg-indigo-50/20 border-indigo-100' : 'bg-indigo-950/10 border-indigo-900/30') : (isLight ? 'bg-slate-50/50 border-slate-200' : 'bg-slate-900/20 border-slate-800/50')}`} onDrop={onDrop} onDragOver={onDragOver}>
       <div className="flex items-center justify-between mb-6 px-3">
@@ -1035,16 +1039,9 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTas
                <GripVertical size={16} className={`${isLight ? 'text-slate-200 group-hover:text-slate-400' : 'text-slate-700 group-hover:text-slate-500'} mt-0.5`} />
                <div className="flex-1">
                   <p className={`font-bold leading-tight pr-8 ${t.completed ? 'line-through' : ''}`}>{t.title}</p>
-                  {t.notes && (
-                    <div className="flex items-start gap-1 mt-1">
-                      <MessageSquare size={10} className="mt-1 flex-shrink-0 text-indigo-400" />
-                      <p className={`text-[10px] italic leading-tight ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>{t.notes}</p>
-                    </div>
-                  )}
+                  {t.notes && <div className="flex items-start gap-1 mt-1"><MessageSquare size={10} className="mt-1 flex-shrink-0 text-indigo-400" /><p className={`text-[10px] italic leading-tight ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>{t.notes}</p></div>}
                   <div className="flex flex-wrap items-center gap-3 mt-2">
-                    <div className="flex items-center gap-1 text-[10px] font-black text-indigo-500 uppercase">
-                      <Zap size={10} fill="currentColor" /> +{t.rewardPoints} pts
-                    </div>
+                    <div className="flex items-center gap-1 text-[10px] font-black text-indigo-500 uppercase"><Zap size={10} fill="currentColor" /> +{t.rewardPoints} pts</div>
                     {t.dueDate && !t.completed && (
                       <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${isOverdue(t.dueDate) ? 'text-rose-500' : 'text-emerald-500'}`}>
                         <Calendar size={10} /> {formatDate(t.dueDate)}
@@ -1055,11 +1052,7 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTas
             </div>
           </div>
         ))}
-        {tasks.length === 0 && (
-           <div className={`h-24 border-2 border-dashed rounded-3xl flex items-center justify-center ${isLight ? 'border-slate-100' : 'border-slate-800'}`}>
-              <span className={`text-[8px] font-black uppercase tracking-widest ${isLight ? 'text-slate-200' : 'text-slate-700'}`}>Solte aqui</span>
-           </div>
-        )}
+        {tasks.length === 0 && <div className={`h-24 border-2 border-dashed rounded-3xl flex items-center justify-center ${isLight ? 'border-slate-100' : 'border-slate-800'}`}><span className={`text-[8px] font-black uppercase tracking-widest ${isLight ? 'text-slate-200' : 'text-slate-700'}`}>Solte aqui</span></div>}
       </div>
     </div>
   );
