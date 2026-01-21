@@ -29,7 +29,8 @@ import {
   Moon,
   ArrowLeft,
   MessageSquare,
-  Info
+  Info,
+  Save
 } from 'lucide-react';
 import { Task, UserStats, Reward, SubTask, TaskStatus } from './types';
 
@@ -104,7 +105,7 @@ const App: React.FC = () => {
   const timerRef = useRef<number | null>(null);
 
   // Modais
-  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | null>(null);
+  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | null>(null);
 
   // Forms
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -112,6 +113,10 @@ const App: React.FC = () => {
   const [newTaskDate, setNewTaskDate] = useState("");
   const [taskToProject, setTaskToProject] = useState({ title: "", notes: "", points: 20, projectId: "", dueDate: "" });
   const [newReward, setNewReward] = useState({ title: "", cost: 50, icon: "🎁" });
+
+  // Edição
+  const [editingMacro, setEditingMacro] = useState<Task | null>(null);
+  const [editingSubTask, setEditingSubTask] = useState<{taskId: string, subTask: SubTask} | null>(null);
 
   // Sincronização LocalStorage
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks)); }, [tasks]);
@@ -191,6 +196,19 @@ const App: React.FC = () => {
     setActiveModal(null);
   };
 
+  const handleOpenEditMacro = (task: Task, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingMacro({ ...task });
+    setActiveModal('edit-macro');
+  };
+
+  const handleUpdateMacro = () => {
+    if (!editingMacro || !editingMacro.title.trim()) return;
+    setTasks(tasks.map(t => t.id === editingMacro.id ? editingMacro : t));
+    setEditingMacro(null);
+    setActiveModal(null);
+  };
+
   const handleDeleteMacro = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm("Deseja realmente excluir este objetivo e todas as suas tarefas?")) {
@@ -221,6 +239,27 @@ const App: React.FC = () => {
 
     setTasks(prev => prev.map(t => t.id === targetId ? { ...t, subTasks: [...t.subTasks, newSub] } : t));
     setTaskToProject({ title: "", notes: "", points: 20, projectId: "", dueDate: "" });
+    setActiveModal(null);
+  };
+
+  const handleOpenEditSubTask = (taskId: string, subTask: SubTask, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingSubTask({ taskId, subTask: { ...subTask } });
+    setActiveModal('edit-task');
+  };
+
+  const handleUpdateSubTask = () => {
+    if (!editingSubTask || !editingSubTask.subTask.title.trim()) return;
+    setTasks(prev => prev.map(t => {
+      if (t.id === editingSubTask.taskId) {
+        return {
+          ...t,
+          subTasks: t.subTasks.map(st => st.id === editingSubTask.subTask.id ? editingSubTask.subTask : st)
+        };
+      }
+      return t;
+    }));
+    setEditingSubTask(null);
     setActiveModal(null);
   };
 
@@ -404,7 +443,16 @@ const App: React.FC = () => {
         {view === 'global' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
             {tasks.filter(t => !t.completed).map(task => (
-              <MacroCard key={task.id} task={task} theme={theme} onFocus={() => { setActiveTaskId(task.id); setView('local'); }} onDelete={(e: React.MouseEvent) => handleDeleteMacro(task.id, e)} formatDate={formatDate} isOverdue={isOverdue} />
+              <MacroCard 
+                key={task.id} 
+                task={task} 
+                theme={theme} 
+                onFocus={() => { setActiveTaskId(task.id); setView('local'); }} 
+                onEdit={(e: React.MouseEvent) => handleOpenEditMacro(task, e)}
+                onDelete={(e: React.MouseEvent) => handleDeleteMacro(task.id, e)} 
+                formatDate={formatDate} 
+                isOverdue={isOverdue} 
+              />
             ))}
             
             {tasks.filter(t => !t.completed).length === 0 && (
@@ -483,9 +531,9 @@ const App: React.FC = () => {
 
                 {/* Kanban Board - Responsivo: Stack em Mobile, 3 Cols em Tablet/Desktop */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-h-[500px]">
-                  <KanbanCol title="A Fazer" theme={theme} tasks={activeTask.subTasks.filter(s => s.status === 'todo')} onDrop={() => onDrop('todo')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} />
-                  <KanbanCol title="Fazendo" theme={theme} tasks={activeTask.subTasks.filter(s => s.status === 'doing')} onDrop={() => onDrop('doing')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} highlight />
-                  <KanbanCol title="Concluído" theme={theme} tasks={activeTask.subTasks.filter(s => s.status === 'done')} onDrop={() => onDrop('done')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} />
+                  <KanbanCol title="A Fazer" theme={theme} tasks={activeTask.subTasks.filter(s => s.status === 'todo')} onDrop={() => onDrop('todo')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onEditSubTask={(st: SubTask, e: any) => handleOpenEditSubTask(activeTask.id, st, e)} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} />
+                  <KanbanCol title="Fazendo" theme={theme} tasks={activeTask.subTasks.filter(s => s.status === 'doing')} onDrop={() => onDrop('doing')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onEditSubTask={(st: SubTask, e: any) => handleOpenEditSubTask(activeTask.id, st, e)} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} highlight />
+                  <KanbanCol title="Concluído" theme={theme} tasks={activeTask.subTasks.filter(s => s.status === 'done')} onDrop={() => onDrop('done')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onEditSubTask={(st: SubTask, e: any) => handleOpenEditSubTask(activeTask.id, st, e)} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} />
                 </div>
               </>
             ) : (
@@ -587,7 +635,7 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Modais */}
+      {/* Modais de Criação */}
       {activeModal === 'macro' && (
         <Modal title="Novo Objetivo Macro" onClose={() => setActiveModal(null)} theme={theme}>
           <div className="space-y-6">
@@ -631,6 +679,54 @@ const App: React.FC = () => {
               </div>
             </div>
             <button onClick={handleAddTaskToProject} disabled={!taskToProject.title.trim()} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-900/20 hover:scale-[1.02] transition-all disabled:opacity-50">Adicionar à Lista</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modais de Edição */}
+      {activeModal === 'edit-macro' && editingMacro && (
+        <Modal title="Editar Objetivo" onClose={() => { setActiveModal(null); setEditingMacro(null); }} theme={theme}>
+          <div className="space-y-6">
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Título do Objetivo</label>
+              <input autoFocus value={editingMacro.title} onChange={e => setEditingMacro({...editingMacro, title: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold text-lg outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Contexto ou Comentário</label>
+              <textarea value={editingMacro.description} onChange={e => setEditingMacro({...editingMacro, description: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 resize-none h-24 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo Final</label>
+              <input type="date" value={editingMacro.dueDate} onChange={e => setEditingMacro({...editingMacro, dueDate: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+            <button onClick={handleUpdateMacro} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"><Save size={20} /> Salvar Alterações</button>
+          </div>
+        </Modal>
+      )}
+
+      {activeModal === 'edit-task' && editingSubTask && (
+        <Modal title="Editar Micro-tarefa" onClose={() => { setActiveModal(null); setEditingSubTask(null); }} theme={theme}>
+          <div className="space-y-6">
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Título da Tarefa</label>
+              <input autoFocus value={editingSubTask.subTask.title} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, title: e.target.value}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Observação ou Dica</label>
+              <textarea value={editingSubTask.subTask.notes || ""} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, notes: e.target.value}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 resize-none h-24 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo (Opcional)</label>
+              <input type="date" value={editingSubTask.subTask.dueDate || ""} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, dueDate: e.target.value}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+            <div className={`flex justify-between items-center p-4 rounded-2xl ${theme === 'light' ? 'bg-slate-50' : 'bg-slate-800'}`}>
+              <span className={`text-xs font-black uppercase tracking-widest ${textMuted}`}>Recompensa:</span>
+              <div className="flex items-center gap-2">
+                <input type="number" value={editingSubTask.subTask.rewardPoints} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, rewardPoints: parseInt(e.target.value) || 0}})} className={`w-16 p-2 text-center border-2 font-black rounded-xl text-indigo-500 outline-none ${theme === 'light' ? 'bg-white border-slate-100' : 'bg-slate-900 border-slate-700'}`} />
+                <span className={`text-xs font-bold ${textMuted}`}>pts</span>
+              </div>
+            </div>
+            <button onClick={handleUpdateSubTask} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"><Save size={20} /> Atualizar Tarefa</button>
           </div>
         </Modal>
       )}
@@ -684,7 +780,7 @@ const NavItem = ({ active, onClick, icon, label, theme }: any) => {
   );
 };
 
-const MacroCard = ({ task, onFocus, onDelete, formatDate, isOverdue, theme }: any) => {
+const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, theme }: any) => {
   const completed = task.subTasks.filter((s:any) => s.completed).length;
   const total = task.subTasks.length;
   const pct = total > 0 ? (completed / total) * 100 : 0;
@@ -692,7 +788,10 @@ const MacroCard = ({ task, onFocus, onDelete, formatDate, isOverdue, theme }: an
 
   return (
     <div onClick={onFocus} className={`p-8 rounded-[3rem] border-2 transition-all cursor-pointer shadow-sm group relative flex flex-col justify-between h-72 ${isLight ? 'bg-white border-slate-50 hover:border-indigo-100' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/30'}`}>
-      <button onClick={onDelete} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
+      <div className="absolute top-6 right-6 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button onClick={onEdit} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors"><Pencil size={16} /></button>
+        <button onClick={onDelete} className="p-2 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
+      </div>
       <div>
         <div className="mb-4 flex flex-wrap gap-2">
           <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${isLight ? 'bg-slate-50 text-slate-400' : 'bg-slate-800 text-slate-500'}`}>Projeto</span>
@@ -702,7 +801,7 @@ const MacroCard = ({ task, onFocus, onDelete, formatDate, isOverdue, theme }: an
             </span>
           )}
         </div>
-        <h3 className={`text-xl font-black leading-tight group-hover:text-indigo-500 transition-colors line-clamp-2 ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>{task.title}</h3>
+        <h3 className={`text-xl font-black leading-tight group-hover:text-indigo-500 transition-colors line-clamp-2 pr-12 ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>{task.title}</h3>
         {task.description && (
           <p className={`text-[11px] mt-2 line-clamp-2 italic ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>{task.description}</p>
         )}
@@ -720,7 +819,7 @@ const MacroCard = ({ task, onFocus, onDelete, formatDate, isOverdue, theme }: an
   );
 };
 
-const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onDeleteSubTask, formatDate, isOverdue, highlight, theme }: any) => {
+const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTask, onDeleteSubTask, formatDate, isOverdue, highlight, theme }: any) => {
   const isLight = theme === 'light';
   
   return (
@@ -732,16 +831,14 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onDeleteSubT
       <div className="flex-1 space-y-4">
         {tasks.map((t: any) => (
           <div key={t.id} draggable onDragStart={() => onDragStart(t.id)} className={`p-5 rounded-3xl shadow-sm border cursor-grab active:cursor-grabbing hover:shadow-lg transition-all group relative ${t.completed ? 'opacity-50' : ''} ${isLight ? 'bg-white border-slate-100 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-200'}`}>
-            <button 
-              onClick={(e) => { e.stopPropagation(); onDeleteSubTask(t.id); }} 
-              className="absolute top-2 right-2 p-1.5 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100 z-10"
-            >
-              <Trash2 size={14} />
-            </button>
+            <div className="absolute top-2 right-2 flex items-center opacity-0 group-hover:opacity-100 transition-opacity z-10">
+              <button onClick={(e) => onEditSubTask(t, e)} className="p-1.5 text-slate-400 hover:text-indigo-500 transition-colors"><Pencil size={12} /></button>
+              <button onClick={(e) => { e.stopPropagation(); onDeleteSubTask(t.id); }} className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={12} /></button>
+            </div>
             <div className="flex items-start gap-3">
                <GripVertical size={16} className={`${isLight ? 'text-slate-200 group-hover:text-slate-400' : 'text-slate-700 group-hover:text-slate-500'} mt-0.5`} />
                <div className="flex-1">
-                  <p className={`font-bold leading-tight pr-4 ${t.completed ? 'line-through' : ''}`}>{t.title}</p>
+                  <p className={`font-bold leading-tight pr-8 ${t.completed ? 'line-through' : ''}`}>{t.title}</p>
                   {t.notes && (
                     <div className="flex items-start gap-1 mt-1">
                       <MessageSquare size={10} className="mt-1 flex-shrink-0 text-indigo-400" />
