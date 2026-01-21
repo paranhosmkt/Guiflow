@@ -26,7 +26,8 @@ import {
   History,
   Clock,
   Sun,
-  Moon
+  Moon,
+  ArrowLeft
 } from 'lucide-react';
 import { Task, UserStats, Reward, SubTask, TaskStatus } from './types';
 
@@ -413,62 +414,66 @@ const App: React.FC = () => {
         )}
 
         {view === 'local' && (
-          <div className="space-y-6 animate-in fade-in duration-300">
+          <div className="space-y-8 animate-in fade-in duration-300">
             {activeTask ? (
               <>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
                   {/* Project Summary Card */}
-                  <div className={`${bgCard} p-8 rounded-[3rem] border ${borderCard} shadow-sm flex flex-col justify-between`}>
-                    <div className="lg:col-span-2">
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        <span className="bg-indigo-600/10 text-indigo-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Foco Atual</span>
-                        {activeTask.dueDate && (
-                          <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isOverdue(activeTask.dueDate) ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
-                            <Calendar size={10} /> Prazo: {formatDate(activeTask.dueDate)}
+                  <div className={`${bgCard} xl:col-span-3 p-8 rounded-[3rem] border ${borderCard} shadow-sm transition-all`}>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                      <div className="flex-1">
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          <button onClick={() => setView('global')} className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-colors ${theme === 'light' ? 'bg-slate-100 text-slate-500 hover:bg-slate-200' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                            <ArrowLeft size={10} /> Voltar
+                          </button>
+                          <span className="bg-indigo-600/10 text-indigo-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Foco Atual</span>
+                          {activeTask.dueDate && (
+                            <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isOverdue(activeTask.dueDate) ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                              <Calendar size={10} /> Prazo: {formatDate(activeTask.dueDate)}
+                            </span>
+                          )}
+                          <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${theme === 'light' ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-300'}`}>
+                            <Clock size={10} /> Focado: {formatTimeSpent(activeTask.totalTimeSpent)}
                           </span>
-                        )}
-                        <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${theme === 'light' ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-300'}`}>
-                          <Clock size={10} /> Focado: {formatTimeSpent(activeTask.totalTimeSpent)}
-                        </span>
+                        </div>
+                        <h2 className="text-3xl md:text-4xl font-black mb-2 leading-tight">{activeTask.title}</h2>
+                        <p className={textMuted}>Organize as micro-tarefas para atingir seu objetivo principal.</p>
                       </div>
-                      <h2 className="text-3xl font-black mb-2">{activeTask.title}</h2>
-                      <p className={textMuted}>Mova as tarefas entre as colunas conforme progride.</p>
-                    </div>
-                    <div className="mt-8 flex gap-3">
-                      <button onClick={() => finishMacroProject(activeTask.id)} className={`px-8 py-4 rounded-2xl font-black transition-all flex items-center gap-2 shadow-xl ${theme === 'light' ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-indigo-600 text-white shadow-indigo-900/40'}`}>
+                      
+                      <button onClick={() => finishMacroProject(activeTask.id)} className={`whitespace-nowrap px-8 py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-xl ${theme === 'light' ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-indigo-600 text-white shadow-indigo-900/40'}`}>
                         <CheckCircle2 size={20} className={theme === 'light' ? 'text-indigo-400' : 'text-white'} /> Finalizar Objetivo (+{activeTask.rewardPoints} pts)
                       </button>
                     </div>
                   </div>
 
-                  {/* Pomodoro Timer Container */}
-                  <div className="lg:col-span-1 flex flex-col gap-4">
-                    <div className={`p-8 rounded-[3rem] border-2 shadow-sm flex flex-col items-center justify-center transition-all relative overflow-hidden ${timerMode === 'work' ? (theme === 'light' ? 'bg-rose-50 border-rose-100' : 'bg-rose-950/20 border-rose-900/50') : (theme === 'light' ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-950/20 border-emerald-900/50')}`}>
+                  {/* Pomodoro Timer & Quick Actions */}
+                  <div className="xl:col-span-1 flex flex-col gap-4">
+                    <div className={`p-6 md:p-8 rounded-[3rem] border-2 shadow-sm flex flex-col items-center justify-center transition-all relative overflow-hidden ${timerMode === 'work' ? (theme === 'light' ? 'bg-rose-50 border-rose-100' : 'bg-rose-950/20 border-rose-900/50') : (theme === 'light' ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-950/20 border-emerald-900/50')}`}>
                       <div className={`absolute top-4 right-6 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${theme === 'light' ? 'bg-white/50 text-slate-500' : 'bg-black/20 text-slate-400'}`}>
                         Ciclo {(cyclesCompleted % 6) + 1}/6
                       </div>
-                      <div className="flex items-center gap-2 mb-4">
-                         {timerMode === 'work' ? <Timer className="text-rose-500" size={18} /> : <Coffee className="text-emerald-500" size={18} />}
-                         <span className={`text-xs font-black uppercase tracking-widest ${timerMode === 'work' ? 'text-rose-500' : 'text-emerald-500'}`}>
-                           {timerMode === 'work' ? 'Foco Profundo' : (cyclesCompleted % 6 === 0 ? 'Pausa Longa' : 'Pausa')}
+                      <div className="flex items-center gap-2 mb-2">
+                         {timerMode === 'work' ? <Timer className="text-rose-500" size={16} /> : <Coffee className="text-emerald-500" size={16} />}
+                         <span className={`text-[10px] font-black uppercase tracking-widest ${timerMode === 'work' ? 'text-rose-500' : 'text-emerald-500'}`}>
+                           {timerMode === 'work' ? 'Foco Profundo' : 'Pausa'}
                          </span>
                       </div>
-                      <div className="text-6xl font-black tabular-nums tracking-tighter mb-8">{Math.floor(timerSeconds / 60).toString().padStart(2, '0')}:{(timerSeconds % 60).toString().padStart(2, '0')}</div>
-                      <div className="flex gap-4">
-                         <button onClick={() => setIsTimerActive(!isTimerActive)} className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg ${timerMode === 'work' ? 'bg-rose-600 shadow-rose-900/20' : 'bg-emerald-600 shadow-emerald-900/20'} hover:scale-110 active:scale-90 transition-all`}>
-                           {isTimerActive ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
+                      <div className="text-5xl font-black tabular-nums tracking-tighter mb-6">{Math.floor(timerSeconds / 60).toString().padStart(2, '0')}:{(timerSeconds % 60).toString().padStart(2, '0')}</div>
+                      <div className="flex gap-3">
+                         <button onClick={() => setIsTimerActive(!isTimerActive)} className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${timerMode === 'work' ? 'bg-rose-600 shadow-rose-900/20' : 'bg-emerald-600 shadow-emerald-900/20'} hover:scale-110 active:scale-90 transition-all`}>
+                           {isTimerActive ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
                          </button>
-                         <button onClick={() => { setIsTimerActive(false); setTimerSeconds(25 * 60); setTimerMode('work'); setCyclesCompleted(0); }} className={`w-14 h-14 rounded-2xl border flex items-center justify-center transition-all shadow-sm ${theme === 'light' ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}><RotateCcw size={24} /></button>
+                         <button onClick={() => { setIsTimerActive(false); setTimerSeconds(25 * 60); setTimerMode('work'); setCyclesCompleted(0); }} className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition-all shadow-sm ${theme === 'light' ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}><RotateCcw size={20} /></button>
                       </div>
                     </div>
                     {/* Botão de Nova Tarefa */}
                     <button onClick={() => setActiveModal('task')} className="bg-emerald-600 text-white px-6 py-4 rounded-[2rem] font-black shadow-lg shadow-emerald-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
-                      <PlusCircle size={22} /> Nova tarefa
+                      <PlusCircle size={22} /> Nova micro-tarefa
                     </button>
                   </div>
                 </div>
 
-                {/* Kanban Board */}
+                {/* Kanban Board - Responsivo: Stack em Mobile, 3 Cols em Tablet/Desktop */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-h-[500px]">
                   <KanbanCol title="A Fazer" theme={theme} tasks={activeTask.subTasks.filter(s => s.status === 'todo')} onDrop={() => onDrop('todo')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} />
                   <KanbanCol title="Fazendo" theme={theme} tasks={activeTask.subTasks.filter(s => s.status === 'doing')} onDrop={() => onDrop('doing')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} highlight />
