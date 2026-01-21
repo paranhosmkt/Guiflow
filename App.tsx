@@ -133,6 +133,14 @@ const App: React.FC = () => {
     setMotivation(randomQuote);
   }, [stats.tasksCompleted, view]);
 
+  // Função auxiliar de ordenação por data
+  const sortByDueDate = (a: { dueDate?: string }, b: { dueDate?: string }) => {
+    if (!a.dueDate && !b.dueDate) return 0;
+    if (!a.dueDate) return 1; // Sem data vai para o final
+    if (!b.dueDate) return -1; // Com data vai para o topo
+    return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+  };
+
   // Timer Logic
   useEffect(() => {
     if (isTimerActive && timerSeconds > 0) {
@@ -491,17 +499,20 @@ const App: React.FC = () => {
         {/* Views */}
         {view === 'global' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
-            {tasks.filter(t => !t.completed).map(task => (
-              <MacroCard 
-                key={task.id} 
-                task={task} 
-                theme={theme} 
-                onFocus={() => { setActiveTaskId(task.id); setView('local'); }} 
-                onEdit={(e: React.MouseEvent) => handleOpenEditMacro(task, e)}
-                onDelete={(e: React.MouseEvent) => handleDeleteMacro(task.id, e)} 
-                formatDate={formatDate} 
-                isOverdue={isOverdue} 
-              />
+            {tasks
+              .filter(t => !t.completed)
+              .sort(sortByDueDate)
+              .map(task => (
+                <MacroCard 
+                  key={task.id} 
+                  task={task} 
+                  theme={theme} 
+                  onFocus={() => { setActiveTaskId(task.id); setView('local'); }} 
+                  onEdit={(e: React.MouseEvent) => handleOpenEditMacro(task, e)}
+                  onDelete={(e: React.MouseEvent) => handleDeleteMacro(task.id, e)} 
+                  formatDate={formatDate} 
+                  isOverdue={isOverdue} 
+                />
             ))}
             
             {tasks.filter(t => !t.completed).length === 0 && (
@@ -581,11 +592,45 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Kanban Board - Responsivo: Stack em Mobile, 3 Cols em Tablet/Desktop */}
+                {/* Kanban Board - Ordenado por Prazo dentro de cada coluna */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-h-[500px]">
-                  <KanbanCol title="A Fazer" theme={theme} tasks={activeTask.subTasks.filter(s => s.status === 'todo')} onDrop={() => onDrop('todo')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onEditSubTask={(st: SubTask, e: any) => handleOpenEditSubTask(activeTask.id, st, e)} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} />
-                  <KanbanCol title="Fazendo" theme={theme} tasks={activeTask.subTasks.filter(s => s.status === 'doing')} onDrop={() => onDrop('doing')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onEditSubTask={(st: SubTask, e: any) => handleOpenEditSubTask(activeTask.id, st, e)} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} highlight />
-                  <KanbanCol title="Concluído" theme={theme} tasks={activeTask.subTasks.filter(s => s.status === 'done')} onDrop={() => onDrop('done')} onDragOver={(e: React.DragEvent) => e.preventDefault()} onDragStart={setDraggedSubTaskId} onEditSubTask={(st: SubTask, e: any) => handleOpenEditSubTask(activeTask.id, st, e)} onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} formatDate={formatDate} isOverdue={isOverdue} />
+                  <KanbanCol 
+                    title="A Fazer" 
+                    theme={theme} 
+                    tasks={activeTask.subTasks.filter(s => s.status === 'todo').sort(sortByDueDate)} 
+                    onDrop={() => onDrop('todo')} 
+                    onDragOver={(e: React.DragEvent) => e.preventDefault()} 
+                    onDragStart={setDraggedSubTaskId} 
+                    onEditSubTask={(st: SubTask, e: any) => handleOpenEditSubTask(activeTask.id, st, e)} 
+                    onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} 
+                    formatDate={formatDate} 
+                    isOverdue={isOverdue} 
+                  />
+                  <KanbanCol 
+                    title="Fazendo" 
+                    theme={theme} 
+                    tasks={activeTask.subTasks.filter(s => s.status === 'doing').sort(sortByDueDate)} 
+                    onDrop={() => onDrop('doing')} 
+                    onDragOver={(e: React.DragEvent) => e.preventDefault()} 
+                    onDragStart={setDraggedSubTaskId} 
+                    onEditSubTask={(st: SubTask, e: any) => handleOpenEditSubTask(activeTask.id, st, e)} 
+                    onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} 
+                    formatDate={formatDate} 
+                    isOverdue={isOverdue} 
+                    highlight 
+                  />
+                  <KanbanCol 
+                    title="Concluído" 
+                    theme={theme} 
+                    tasks={activeTask.subTasks.filter(s => s.status === 'done').sort(sortByDueDate)} 
+                    onDrop={() => onDrop('done')} 
+                    onDragOver={(e: React.DragEvent) => e.preventDefault()} 
+                    onDragStart={setDraggedSubTaskId} 
+                    onEditSubTask={(st: SubTask, e: any) => handleOpenEditSubTask(activeTask.id, st, e)} 
+                    onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} 
+                    formatDate={formatDate} 
+                    isOverdue={isOverdue} 
+                  />
                 </div>
               </>
             ) : (
