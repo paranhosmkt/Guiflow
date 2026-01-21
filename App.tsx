@@ -58,7 +58,7 @@ const MOTIVATION_QUOTES = [
 
 const EMOJI_OPTIONS = [
   '🎁', '🍫', '🍦', '🍕', '🎮', '🎬', '📺', '📱', '🛌', '🧘', 
-  '🛀', '🚶', '📚', '🎨', '🎧', '🎸', '🛹', '🍦', '🧁', '🍕',
+  '🛀', '🛀', '📚', '🎨', '🎧', '🎸', '🛹', '🍦', '🧁', '🍕',
   '☕', '🍵', '🍷', '🍺', '🏖️', '⛰️', '🎡', '🎢', '💎', '💰'
 ];
 
@@ -139,6 +139,7 @@ const App: React.FC = () => {
   const [timerMode, setTimerMode] = useState<'work' | 'break'>('work');
   const [cyclesCompleted, setCyclesCompleted] = useState(0);
   const [timerFlash, setTimerFlash] = useState(false);
+  const [timerBoundTaskId, setTimerBoundTaskId] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
 
   // Modais
@@ -187,6 +188,14 @@ const App: React.FC = () => {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isTimerActive, timerSeconds]);
 
+  const toggleTimer = () => {
+    if (!isTimerActive && timerMode === 'work' && activeTaskId) {
+      // Quando iniciar o foco, vincular à tarefa ativa atual
+      setTimerBoundTaskId(activeTaskId);
+    }
+    setIsTimerActive(!isTimerActive);
+  };
+
   const handleTimerComplete = () => {
     setIsTimerActive(false);
     setTimerFlash(true);
@@ -199,17 +208,17 @@ const App: React.FC = () => {
       
       playAlertSound('work-end');
 
-      // Adicionar tempo focado ao objetivo ativo
-      if (activeTaskId) {
+      // Adicionar tempo focado à tarefa que estava vinculada ao timer
+      const targetTaskId = timerBoundTaskId || activeTaskId;
+      if (targetTaskId) {
         setTasks(prev => prev.map(t => 
-          t.id === activeTaskId 
+          t.id === targetTaskId 
             ? { ...t, totalTimeSpent: (t.totalTimeSpent || 0) + 25 } 
             : t
         ));
       }
 
       setTimerMode('break');
-      // A cada 6 ciclos: 45 minutos. Caso contrário: 5 minutos.
       if (nextCycles % 6 === 0) {
         setTimerSeconds(45 * 60); 
         alert("🎉 6º CICLO CONCLUÍDO! Você merece um descanso longo de 45 minutos. Recarregue as energias!");
@@ -597,17 +606,31 @@ const App: React.FC = () => {
                       </div>
                       <div className="flex items-center gap-2 mb-2">
                          {timerMode === 'work' ? <Timer className="text-rose-500" size={16} /> : <Coffee className="text-emerald-500" size={16} />}
-                         <span className={`text-[10px] font-black uppercase tracking-widest ${timerMode === 'work' ? 'text-rose-500' : 'text-emerald-500'}`}>
+                         <span className={`text-[10px] font-black uppercase tracking-widest ${timerMode === 'work' ? 'text-rose-500' : (cyclesCompleted % 6 === 0 && cyclesCompleted > 0 ? 'Descanso Longo' : 'Pausa')}`}>
                            {timerMode === 'work' ? 'Foco Profundo' : (cyclesCompleted % 6 === 0 && cyclesCompleted > 0 ? 'Descanso Longo' : 'Pausa')}
                          </span>
                       </div>
-                      <div className="text-5xl font-black tabular-nums tracking-tighter mb-6">{Math.floor(timerSeconds / 60).toString().padStart(2, '0')}:{(timerSeconds % 60).toString().padStart(2, '0')}</div>
+                      <div className="text-5xl font-black tabular-nums tracking-tighter mb-4">{Math.floor(timerSeconds / 60).toString().padStart(2, '0')}:{(timerSeconds % 60).toString().padStart(2, '0')}</div>
+                      
+                      {/* Contador de Tempo Acumulado na Atividade */}
+                      <div className={`mb-6 flex items-center gap-2 px-4 py-2 rounded-2xl ${theme === 'light' ? 'bg-white/40' : 'bg-black/20'}`}>
+                        <Briefcase size={14} className="text-indigo-500" />
+                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Total: {formatTimeSpent(activeTask.totalTimeSpent)}</span>
+                      </div>
+
                       <div className="flex gap-3">
-                         <button onClick={() => setIsTimerActive(!isTimerActive)} className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${timerMode === 'work' ? 'bg-rose-600 shadow-rose-900/20' : 'bg-emerald-600 shadow-emerald-900/20'} hover:scale-110 active:scale-90 transition-all`}>
+                         <button onClick={toggleTimer} className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${timerMode === 'work' ? 'bg-rose-600 shadow-rose-900/20' : 'bg-emerald-600 shadow-emerald-900/20'} hover:scale-110 active:scale-90 transition-all`}>
                            {isTimerActive ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
                          </button>
-                         <button onClick={() => { setIsTimerActive(false); setTimerSeconds(25 * 60); setTimerMode('work'); setCyclesCompleted(0); }} className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition-all shadow-sm ${theme === 'light' ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}><RotateCcw size={20} /></button>
+                         <button onClick={() => { setIsTimerActive(false); setTimerSeconds(25 * 60); setTimerMode('work'); setCyclesCompleted(0); setTimerBoundTaskId(null); }} className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition-all shadow-sm ${theme === 'light' ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}><RotateCcw size={20} /></button>
                       </div>
+                      
+                      {isTimerActive && timerBoundTaskId && (
+                        <div className="mt-4 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping" />
+                          <span className="text-[8px] font-black uppercase tracking-tighter opacity-40">Contabilizando tempo para este projeto</span>
+                        </div>
+                      )}
                     </div>
                     {/* Botão de Nova Tarefa */}
                     <button onClick={() => setActiveModal('task')} className="bg-emerald-600 text-white px-6 py-4 rounded-[2rem] font-black shadow-lg shadow-emerald-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
