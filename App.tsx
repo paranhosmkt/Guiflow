@@ -30,8 +30,10 @@ import {
   ArrowLeft,
   MessageSquare,
   Info,
-  Save
+  Save,
+  Star
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { Task, UserStats, Reward, SubTask, TaskStatus } from './types';
 
 // Constantes para LocalStorage
@@ -96,6 +98,7 @@ const App: React.FC = () => {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [motivation, setMotivation] = useState("");
   const [draggedSubTaskId, setDraggedSubTaskId] = useState<string | null>(null);
+  const [showCelebration, setShowCelebration] = useState<{points: number} | null>(null);
 
   // Pomodoro Timer
   const [timerSeconds, setTimerSeconds] = useState(25 * 60);
@@ -309,11 +312,51 @@ const App: React.FC = () => {
       completedAt: new Date().toISOString()
     };
 
+    // Disparar celebração
+    triggerCelebration(task.rewardPoints);
+
     setStats(s => ({ ...s, points: s.points + task.rewardPoints, tasksCompleted: s.tasksCompleted + 1 }));
     setCompletedTasks([finalizedTask, ...completedTasks]);
     setTasks(prev => prev.filter(t => t.id !== id));
-    setView('history');
     setActiveTaskId(null);
+  };
+
+  const triggerCelebration = (points: number) => {
+    // Sequência de fogos de artifício
+    const duration = 4 * 1000;
+    const animationEnd = Date.now() + duration;
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+    const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+    const interval = window.setInterval(() => {
+      const timeLeft = animationEnd - Date.now();
+
+      if (timeLeft <= 0) {
+        return clearInterval(interval);
+      }
+
+      const particleCount = 50 * (timeLeft / duration);
+      
+      confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
+      confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
+    }, 250);
+
+    // Rajada central
+    confetti({
+      particleCount: 150,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors: ['#6366f1', '#a855f7', '#10b981', '#fbbf24']
+    });
+
+    setShowCelebration({ points });
+    
+    // Esconder após alguns segundos e mudar de tela
+    setTimeout(() => {
+      setShowCelebration(null);
+      setView('history');
+    }, 4000);
   };
 
   const handleCreateReward = () => {
@@ -332,6 +375,12 @@ const App: React.FC = () => {
   };
 
   const activeTask = useMemo(() => tasks.find(t => t.id === activeTaskId) || null, [tasks, activeTaskId]);
+
+  // Verificar se todas as subtasks estão prontas
+  const isProjectReadyToFinish = useMemo(() => {
+    if (!activeTask || activeTask.subTasks.length === 0) return false;
+    return activeTask.subTasks.every(st => st.status === 'done');
+  }, [activeTask]);
 
   const onDrop = (status: TaskStatus) => {
     if (draggedSubTaskId && activeTask) {
@@ -496,7 +545,10 @@ const App: React.FC = () => {
                         <p className={textMuted}>Organize as micro-tarefas para atingir seu objetivo principal.</p>
                       </div>
                       
-                      <button onClick={() => finishMacroProject(activeTask.id)} className={`whitespace-nowrap px-8 py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-xl ${theme === 'light' ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-indigo-600 text-white shadow-indigo-900/40'}`}>
+                      <button 
+                        onClick={() => finishMacroProject(activeTask.id)} 
+                        className={`whitespace-nowrap px-8 py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-xl ${isProjectReadyToFinish ? 'scale-110' : ''} ${theme === 'light' ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-indigo-600 text-white shadow-indigo-900/40'} ${!isProjectReadyToFinish ? 'opacity-50' : ''}`}
+                      >
                         <CheckCircle2 size={20} className={theme === 'light' ? 'text-indigo-400' : 'text-white'} /> Finalizar Objetivo (+{activeTask.rewardPoints} pts)
                       </button>
                     </div>
@@ -634,6 +686,30 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* Overlay de Celebração */}
+      {showCelebration && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-indigo-950/40 backdrop-blur-md animate-in fade-in duration-300" />
+           <div className={`relative p-12 rounded-[4rem] text-center shadow-2xl animate-in zoom-in-95 duration-500 flex flex-col items-center border ${theme === 'light' ? 'bg-white border-white' : 'bg-slate-900 border-slate-800'}`}>
+              <div className="w-24 h-24 bg-amber-400 rounded-full flex items-center justify-center mb-6 shadow-xl animate-bounce">
+                <Star size={48} className="text-white" fill="currentColor" />
+              </div>
+              <h2 className="text-4xl font-black tracking-tighter mb-2">VOCÊ É IMPARÁVEL!</h2>
+              <p className={`text-lg font-bold mb-8 ${textMuted}`}>Objetivo Macro Concluído com Sucesso</p>
+              
+              <div className="bg-indigo-600 text-white px-8 py-4 rounded-3xl flex items-center gap-3 shadow-lg shadow-indigo-900/30">
+                 <Zap size={32} fill="currentColor" />
+                 <div className="text-left">
+                    <span className="text-[10px] font-black uppercase tracking-widest opacity-70">Recompensa</span>
+                    <div className="text-2xl font-black leading-none">+{showCelebration.points} PONTOS</div>
+                 </div>
+              </div>
+              
+              <p className="mt-10 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Progresso, não perfeição.</p>
+           </div>
+        </div>
+      )}
 
       {/* Modais de Criação */}
       {activeModal === 'macro' && (
