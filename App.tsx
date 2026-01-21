@@ -31,7 +31,8 @@ import {
   MessageSquare,
   Info,
   Save,
-  Star
+  Star,
+  BellRing
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Task, UserStats, Reward, SubTask, TaskStatus } from './types';
@@ -66,6 +67,38 @@ const INITIAL_REWARDS: Reward[] = [
   { id: 'r2', title: 'Comer um doce', cost: 100, icon: '🍫' },
   { id: 'r3', title: 'Episódio de série', cost: 300, icon: '📺' },
 ];
+
+// Utilitário para gerar som sem arquivos externos
+const playAlertSound = (type: 'work-end' | 'break-end') => {
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    if (type === 'work-end') {
+      // Notas ascendentes alegres
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+      oscillator.frequency.exponentialRampToValueAtTime(1046.50, audioCtx.currentTime + 0.5); // C6
+    } else {
+      // Notas suaves descendentes para voltar ao foco
+      oscillator.type = 'triangle';
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+      oscillator.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.5); // A4
+    }
+
+    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + 0.5);
+  } catch (e) {
+    console.warn("Audio Context não suportado ou bloqueado pelo navegador.");
+  }
+};
 
 const App: React.FC = () => {
   // Estados com carregamento do LocalStorage
@@ -105,6 +138,7 @@ const App: React.FC = () => {
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [timerMode, setTimerMode] = useState<'work' | 'break'>('work');
   const [cyclesCompleted, setCyclesCompleted] = useState(0);
+  const [timerFlash, setTimerFlash] = useState(false);
   const timerRef = useRef<number | null>(null);
 
   // Modais
@@ -136,8 +170,8 @@ const App: React.FC = () => {
   // Função auxiliar de ordenação por data
   const sortByDueDate = (a: { dueDate?: string }, b: { dueDate?: string }) => {
     if (!a.dueDate && !b.dueDate) return 0;
-    if (!a.dueDate) return 1; // Sem data vai para o final
-    if (!b.dueDate) return -1; // Com data vai para o topo
+    if (!a.dueDate) return 1;
+    if (!b.dueDate) return -1;
     return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
   };
 
@@ -145,7 +179,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (isTimerActive && timerSeconds > 0) {
       timerRef.current = window.setInterval(() => setTimerSeconds(prev => prev - 1), 1000);
-    } else if (timerSeconds === 0) {
+    } else if (timerSeconds === 0 && isTimerActive) {
       handleTimerComplete();
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -155,11 +189,16 @@ const App: React.FC = () => {
 
   const handleTimerComplete = () => {
     setIsTimerActive(false);
+    setTimerFlash(true);
+    setTimeout(() => setTimerFlash(false), 3000);
+
     if (timerMode === 'work') {
       const nextCycles = cyclesCompleted + 1;
       setCyclesCompleted(nextCycles);
       setStats(s => ({ ...s, points: s.points + 15 }));
       
+      playAlertSound('work-end');
+
       // Adicionar tempo focado ao objetivo ativo
       if (activeTaskId) {
         setTasks(prev => prev.map(t => 
@@ -170,17 +209,19 @@ const App: React.FC = () => {
       }
 
       setTimerMode('break');
+      // A cada 6 ciclos: 45 minutos. Caso contrário: 5 minutos.
       if (nextCycles % 6 === 0) {
         setTimerSeconds(45 * 60); 
-        alert("Ciclo 6 concluído! Hora de um descanso longo (45 min). Ganhou 15 pontos e registrou 25 min de foco.");
+        alert("🎉 6º CICLO CONCLUÍDO! Você merece um descanso longo de 45 minutos. Recarregue as energias!");
       } else {
         setTimerSeconds(5 * 60);
-        alert(`Bloco de foco ${nextCycles}/6 concluído! Ganhou 15 pontos e registrou 25 min de foco.`);
+        alert(`⚡ Foco concluído (${nextCycles}/6)! Hora de 5 minutos de pausa. Beba água!`);
       }
     } else {
+      playAlertSound('break-end');
       setTimerMode('work');
       setTimerSeconds(25 * 60);
-      alert("Pausa concluída! Pronto para o próximo bloco de foco?");
+      alert("🚀 Pausa concluída! Pronto para mais 25 minutos de clareza?");
     }
   };
 
@@ -320,7 +361,6 @@ const App: React.FC = () => {
       completedAt: new Date().toISOString()
     };
 
-    // Disparar celebração
     triggerCelebration(task.rewardPoints);
 
     setStats(s => ({ ...s, points: s.points + task.rewardPoints, tasksCompleted: s.tasksCompleted + 1 }));
@@ -330,27 +370,19 @@ const App: React.FC = () => {
   };
 
   const triggerCelebration = (points: number) => {
-    // Sequência de fogos de artifício
     const duration = 4 * 1000;
     const animationEnd = Date.now() + duration;
     const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
-
     const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
 
     const interval = window.setInterval(() => {
       const timeLeft = animationEnd - Date.now();
-
-      if (timeLeft <= 0) {
-        return clearInterval(interval);
-      }
-
+      if (timeLeft <= 0) return clearInterval(interval);
       const particleCount = 50 * (timeLeft / duration);
-      
       confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
       confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
     }, 250);
 
-    // Rajada central
     confetti({
       particleCount: 150,
       spread: 70,
@@ -359,8 +391,6 @@ const App: React.FC = () => {
     });
 
     setShowCelebration({ points });
-    
-    // Esconder após alguns segundos e mudar de tela
     setTimeout(() => {
       setShowCelebration(null);
       setView('history');
@@ -369,10 +399,7 @@ const App: React.FC = () => {
 
   const handleCreateReward = () => {
     if (!newReward.title.trim()) return;
-    const reward: Reward = {
-      id: Date.now().toString(),
-      ...newReward
-    };
+    const reward: Reward = { id: Date.now().toString(), ...newReward };
     setRewards([...rewards, reward]);
     setNewReward({ title: "", cost: 50, icon: "🎁" });
     setActiveModal(null);
@@ -384,7 +411,6 @@ const App: React.FC = () => {
 
   const activeTask = useMemo(() => tasks.find(t => t.id === activeTaskId) || null, [tasks, activeTaskId]);
 
-  // Verificar se todas as subtasks estão prontas
   const isProjectReadyToFinish = useMemo(() => {
     if (!activeTask || activeTask.subTasks.length === 0) return false;
     return activeTask.subTasks.every(st => st.status === 'done');
@@ -421,7 +447,6 @@ const App: React.FC = () => {
 
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
 
-  // Classes dinâmicas baseadas no tema
   const bgMain = theme === 'light' ? 'bg-slate-50' : 'bg-slate-950';
   const bgCard = theme === 'light' ? 'bg-white' : 'bg-slate-900';
   const textMain = theme === 'light' ? 'text-slate-900' : 'text-slate-100';
@@ -452,7 +477,6 @@ const App: React.FC = () => {
           <NavItem active={view === 'rewards'} onClick={() => setView('rewards')} icon={<Trophy size={20} />} label="Prêmios" theme={theme} />
           <NavItem active={view === 'history'} onClick={() => setView('history')} icon={<History size={20} />} label="Histórico" theme={theme} />
           
-          {/* Mobile Theme Toggle */}
           <button onClick={toggleTheme} className="md:hidden flex flex-col items-center gap-1 px-4 py-2 text-slate-400">
              {theme === 'light' ? <Moon size={20} /> : <Sun size={20} className="text-amber-400" />}
              <span className="text-[9px] uppercase font-bold tracking-tight">Tema</span>
@@ -558,7 +582,7 @@ const App: React.FC = () => {
                       
                       <button 
                         onClick={() => finishMacroProject(activeTask.id)} 
-                        className={`whitespace-nowrap px-8 py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-xl ${isProjectReadyToFinish ? 'scale-110' : ''} ${theme === 'light' ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-indigo-600 text-white shadow-indigo-900/40'} ${!isProjectReadyToFinish ? 'opacity-50' : ''}`}
+                        className={`whitespace-nowrap px-8 py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-xl ${isProjectReadyToFinish ? 'scale-110' : ''} ${theme === 'light' ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-indigo-600 text-white shadow-indigo-900/40'} ${!isProjectReadyToFinish ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105 active:scale-95'}`}
                       >
                         <CheckCircle2 size={20} className={theme === 'light' ? 'text-indigo-400' : 'text-white'} /> Finalizar Objetivo (+{activeTask.rewardPoints} pts)
                       </button>
@@ -567,14 +591,14 @@ const App: React.FC = () => {
 
                   {/* Pomodoro Timer & Quick Actions */}
                   <div className="xl:col-span-1 flex flex-col gap-4">
-                    <div className={`p-6 md:p-8 rounded-[3rem] border-2 shadow-sm flex flex-col items-center justify-center transition-all relative overflow-hidden ${timerMode === 'work' ? (theme === 'light' ? 'bg-rose-50 border-rose-100' : 'bg-rose-950/20 border-rose-900/50') : (theme === 'light' ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-950/20 border-emerald-900/50')}`}>
+                    <div className={`p-6 md:p-8 rounded-[3rem] border-2 shadow-sm flex flex-col items-center justify-center transition-all relative overflow-hidden ${timerFlash ? 'animate-pulse scale-105' : ''} ${timerMode === 'work' ? (theme === 'light' ? 'bg-rose-50 border-rose-100' : 'bg-rose-950/20 border-rose-900/50') : (theme === 'light' ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-950/20 border-emerald-900/50')}`}>
                       <div className={`absolute top-4 right-6 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${theme === 'light' ? 'bg-white/50 text-slate-500' : 'bg-black/20 text-slate-400'}`}>
                         Ciclo {(cyclesCompleted % 6) + 1}/6
                       </div>
                       <div className="flex items-center gap-2 mb-2">
                          {timerMode === 'work' ? <Timer className="text-rose-500" size={16} /> : <Coffee className="text-emerald-500" size={16} />}
                          <span className={`text-[10px] font-black uppercase tracking-widest ${timerMode === 'work' ? 'text-rose-500' : 'text-emerald-500'}`}>
-                           {timerMode === 'work' ? 'Foco Profundo' : 'Pausa'}
+                           {timerMode === 'work' ? 'Foco Profundo' : (cyclesCompleted % 6 === 0 && cyclesCompleted > 0 ? 'Descanso Longo' : 'Pausa')}
                          </span>
                       </div>
                       <div className="text-5xl font-black tabular-nums tracking-tighter mb-6">{Math.floor(timerSeconds / 60).toString().padStart(2, '0')}:{(timerSeconds % 60).toString().padStart(2, '0')}</div>
@@ -592,7 +616,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Kanban Board - Ordenado por Prazo dentro de cada coluna */}
+                {/* Kanban Board */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-h-[500px]">
                   <KanbanCol 
                     title="A Fazer" 
@@ -756,7 +780,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Modais de Criação */}
+      {/* Modais */}
       {activeModal === 'macro' && (
         <Modal title="Novo Objetivo Macro" onClose={() => setActiveModal(null)} theme={theme}>
           <div className="space-y-6">
