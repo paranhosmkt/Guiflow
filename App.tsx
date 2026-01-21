@@ -133,14 +133,16 @@ const App: React.FC = () => {
   const [draggedSubTaskId, setDraggedSubTaskId] = useState<string | null>(null);
   const [showCelebration, setShowCelebration] = useState<{points: number} | null>(null);
 
-  // Pomodoro Timer
+  // Pomodoro Timer - Nova lógica de alta precisão
   const [timerSeconds, setTimerSeconds] = useState(25 * 60);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [timerMode, setTimerMode] = useState<'work' | 'break'>('work');
   const [cyclesCompleted, setCyclesCompleted] = useState(0);
   const [timerFlash, setTimerFlash] = useState(false);
   const [timerBoundTaskId, setTimerBoundTaskId] = useState<string | null>(null);
+  
   const timerRef = useRef<number | null>(null);
+  const lastTickRef = useRef<number>(0);
 
   // Modais
   const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | null>(null);
@@ -176,21 +178,37 @@ const App: React.FC = () => {
     return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
   };
 
-  // Timer Logic
+  // Timer Logic - Wall Clock Precision para background tabs
   useEffect(() => {
     if (isTimerActive && timerSeconds > 0) {
-      timerRef.current = window.setInterval(() => setTimerSeconds(prev => prev - 1), 1000);
-    } else if (timerSeconds === 0 && isTimerActive) {
-      handleTimerComplete();
+      lastTickRef.current = Date.now();
+      
+      // Checagem frequente (200ms) para compensar lags de sistema ou suspensão de aba
+      timerRef.current = window.setInterval(() => {
+        const now = Date.now();
+        const delta = now - lastTickRef.current;
+        const secondsToSubtract = Math.floor(delta / 1000);
+        
+        if (secondsToSubtract >= 1) {
+          setTimerSeconds(prev => Math.max(0, prev - secondsToSubtract));
+          lastTickRef.current += secondsToSubtract * 1000;
+        }
+      }, 200);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isTimerActive, timerSeconds]);
+  }, [isTimerActive]);
+
+  // Efeito separado para monitorar a conclusão (evita problemas de stale closures)
+  useEffect(() => {
+    if (timerSeconds === 0 && isTimerActive) {
+      handleTimerComplete();
+    }
+  }, [timerSeconds, isTimerActive]);
 
   const toggleTimer = () => {
     if (!isTimerActive && timerMode === 'work' && activeTaskId) {
-      // Quando iniciar o foco, vincular à tarefa ativa atual
       setTimerBoundTaskId(activeTaskId);
     }
     setIsTimerActive(!isTimerActive);
@@ -198,6 +216,8 @@ const App: React.FC = () => {
 
   const handleTimerComplete = () => {
     setIsTimerActive(false);
+    if (timerRef.current) clearInterval(timerRef.current);
+    
     setTimerFlash(true);
     setTimeout(() => setTimerFlash(false), 3000);
 
@@ -208,7 +228,6 @@ const App: React.FC = () => {
       
       playAlertSound('work-end');
 
-      // Adicionar tempo focado à tarefa que estava vinculada ao timer
       const targetTaskId = timerBoundTaskId || activeTaskId;
       if (targetTaskId) {
         setTasks(prev => prev.map(t => 
@@ -628,7 +647,7 @@ const App: React.FC = () => {
                       {isTimerActive && timerBoundTaskId && (
                         <div className="mt-4 flex items-center gap-1">
                           <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping" />
-                          <span className="text-[8px] font-black uppercase tracking-tighter opacity-40">Contabilizando tempo para este projeto</span>
+                          <span className="text-[8px] font-black uppercase tracking-tighter opacity-40">Contabilizando tempo real...</span>
                         </div>
                       )}
                     </div>
