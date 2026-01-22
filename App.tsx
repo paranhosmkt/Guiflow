@@ -37,7 +37,8 @@ import {
   BatteryMedium,
   BatteryFull,
   Link2,
-  ExternalLink
+  ExternalLink,
+  FileText
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink } from './types';
@@ -58,12 +59,42 @@ const MOTIVATION_QUOTES = [
   "Respire. Uma coisa de cada vez.",
   "Comemore as pequenas vitórias de hoje!",
   "Feito é melhor que perfeito.",
-  "Você está indo muito bem, continue!"
+  "Você está indo muito bem, continue!",
+  "Sua jornada é única, não se compare aos outros.",
+  "Pequenas vitórias são o combustível para grandes mudanças.",
+  "O caos externo não define sua paz interna.",
+  "Seu cérebro é um motor de Ferrari com freios de bicicleta; aprenda a dirigir com cuidado.",
+  "A distração é apenas sua curiosidade explorando o mundo.",
+  "Mudar a estratégia é sinal de inteligência, não de desistência.",
+  "Respeite seu ritmo; até a lua tem fases.",
+  "Focar no 'como' é mais importante do que focar no 'quanto'.",
+  "A paralisia da análise resolve-se com o primeiro movimento.",
+  "Você não é preguiçoso, você está gerenciando uma carga cognitiva imensa.",
+  "Hoje é um novo dia para tentar de um jeito diferente.",
+  "A criatividade é o seu superpoder secreto.",
+  "Organização é uma ferramenta, não um destino final.",
+  "Perdoe-se pelos dias de neblina mental.",
+  "A clareza vem da ação, não do pensamento excessivo.",
+  "Simplifique até que pareça impossível errar.",
+  "Sua mente hiperfocada pode mover montanhas.",
+  "O 'perfeito' é o inimigo do 'feito'.",
+  "Dê a si mesmo a permissão para ser um iniciante.",
+  "Cada tarefa concluída é um voto de confiança em você mesmo.",
+  "Transforme 'eu tenho que' em 'eu escolho'.",
+  "Sua neurodivergência traz cores que o mundo precisa ver.",
+  "O cansaço mental é real; descanse sem culpa.",
+  "Um ambiente acolhedor é metade do caminho para o foco.",
+  "Você é mais do que sua produtividade.",
+  "Celebre o esforço, o resultado virá naturalmente.",
+  "Quebre o silêncio da procrastinação com uma música que te anime.",
+  "Sua intuição costuma ser sua melhor bússola.",
+  "Não lute contra seu cérebro, trabalhe com ele.",
+  "Você sobreviveu a 100% dos seus dias difíceis até agora."
 ];
 
 const EMOJI_OPTIONS = [
   '🎁', '🍫', '🍦', '🍕', '🎮', '🎬', '📺', '📱', '🛌', '🧘', 
-  '🛀', '🛀', '📚', '🎨', '🎧', '🎸', '🛹', '🍦', '🧁', '🍕',
+  '🛀', '🛀', '📚', '🎨', '🎧', '🎸', '🎧', '🛹', '🍦', '🧁', '🍕',
   '☕', '🍵', '🍷', '🍺', '🏖️', '⛰️', '🎡', '🎢', '💎', '💰'
 ];
 
@@ -155,6 +186,7 @@ const App: React.FC = () => {
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [newTaskNotes, setNewTaskNotes] = useState("");
   const [newTaskDate, setNewTaskDate] = useState("");
   const [taskToProject, setTaskToProject] = useState({ title: "", notes: "", points: 5, projectId: "", dueDate: "" });
   const [newReward, setNewReward] = useState({ title: "", cost: 50, icon: "🎁" });
@@ -172,7 +204,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const randomQuote = MOTIVATION_QUOTES[Math.floor(Math.random() * MOTIVATION_QUOTES.length)];
     setMotivation(randomQuote);
-  }, [stats.tasksCompleted, view]);
+  }, [stats.tasksCompleted, view, tasks.length]);
 
   const sortByDueDate = (a: { dueDate?: string }, b: { dueDate?: string }) => {
     if (!a.dueDate && !b.dueDate) return 0;
@@ -264,6 +296,7 @@ const App: React.FC = () => {
       id: Date.now().toString(),
       title: newTaskTitle,
       description: newTaskDescription,
+      notes: newTaskNotes,
       priority: 'medium',
       status: 'todo',
       dueDate: newTaskDate || new Date().toISOString().split('T')[0],
@@ -278,12 +311,13 @@ const App: React.FC = () => {
     setTasks([...tasks, newTask]);
     setNewTaskTitle("");
     setNewTaskDescription("");
+    setNewTaskNotes("");
     setNewTaskDate("");
     setActiveModal(null);
   };
 
-  const handleOpenEditMacro = (task: Task, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleOpenEditMacro = (task: Task, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setEditingMacro({ ...task });
     setActiveModal('edit-macro');
   };
@@ -637,6 +671,23 @@ const App: React.FC = () => {
                         <h2 className="text-3xl md:text-4xl font-black mb-2 leading-tight">{activeTask.title}</h2>
                         {activeTask.description && <p className={`mb-6 italic text-sm ${textMuted}`}>"{activeTask.description}"</p>}
                         
+                        {/* Seção de Notas do Objetivo */}
+                        <div className={`mt-8 p-6 rounded-3xl border ${theme === 'light' ? 'bg-slate-50/50 border-slate-100' : 'bg-slate-800/30 border-slate-700'}`}>
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-[11px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
+                              <FileText size={14} /> Notas do Objetivo
+                            </h4>
+                            <button onClick={() => handleOpenEditMacro(activeTask)} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-500 flex items-center gap-1 transition-colors">
+                              <Pencil size={10} /> Editar Notas
+                            </button>
+                          </div>
+                          {activeTask.notes ? (
+                            <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap">{activeTask.notes}</p>
+                          ) : (
+                            <p className={`text-sm italic font-medium opacity-40 ${textMuted}`}>Nenhuma nota detalhada. Clique em editar para adicionar orientações ou rascunhos.</p>
+                          )}
+                        </div>
+
                         <div className="mt-8">
                           <div className="flex items-center justify-between mb-4">
                             <h4 className="text-[11px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
@@ -689,11 +740,24 @@ const App: React.FC = () => {
                         <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Acumulado: {formatTimeSpent(activeTask.totalTimeSpent)}</span>
                       </div>
 
-                      <div className="flex gap-3">
-                         <button onClick={toggleTimer} className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${timerMode === 'work' ? 'bg-rose-600 shadow-rose-900/20' : 'bg-emerald-600 shadow-emerald-900/20'} hover:scale-110 active:scale-90 transition-all`}>
-                           {isTimerActive ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+                      <div className="flex gap-3 w-full">
+                         <button 
+                           onClick={toggleTimer} 
+                           className={`flex-1 py-4 rounded-2xl flex items-center justify-center gap-2 text-white font-black shadow-lg transition-all hover:scale-[1.02] active:scale-95 ${timerMode === 'work' ? 'bg-rose-600 shadow-rose-900/20' : 'bg-emerald-600 shadow-emerald-900/20'}`}
+                         >
+                           {isTimerActive ? (
+                             <>
+                               <Pause size={20} fill="currentColor" />
+                               <span className="text-xs uppercase tracking-widest">Pausar</span>
+                             </>
+                           ) : (
+                             <>
+                               <Play size={20} fill="currentColor" />
+                               <span className="text-xs uppercase tracking-widest">Continuar</span>
+                             </>
+                           )}
                          </button>
-                         <button onClick={() => { setIsTimerActive(false); setTimerSeconds(25 * 60); setTimerMode('work'); setCyclesCompleted(0); }} className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition-all shadow-sm ${theme === 'light' ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}><RotateCcw size={20} /></button>
+                         <button onClick={() => { setIsTimerActive(false); setTimerSeconds(25 * 60); setTimerMode('work'); setCyclesCompleted(0); }} className={`w-14 h-14 rounded-2xl border flex items-center justify-center transition-all shadow-sm ${theme === 'light' ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}><RotateCcw size={20} /></button>
                       </div>
                     </div>
                     <button onClick={() => setActiveModal('task')} className="bg-emerald-600 text-white px-6 py-4 rounded-[2rem] font-black shadow-lg shadow-emerald-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
@@ -842,8 +906,12 @@ const App: React.FC = () => {
               <input autoFocus value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} placeholder="Ex: Organizar o Escritório" className={`w-full p-4 border-2 rounded-2xl font-bold text-lg outline-none focus:border-indigo-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
-              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Contexto (Opcional)</label>
-              <textarea value={newTaskDescription} onChange={e => setNewTaskDescription(e.target.value)} placeholder="Por que isso é importante?" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 resize-none h-24 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Contexto Rápido</label>
+              <input value={newTaskDescription} onChange={e => setNewTaskDescription(e.target.value)} placeholder="Por que isso é importante?" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Notas e Orientações</label>
+              <textarea value={newTaskNotes} onChange={e => setNewTaskNotes(e.target.value)} placeholder="Descreva detalhes, ideias ou o que vier à mente..." className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 resize-none h-32 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo Final</label>
@@ -912,6 +980,14 @@ const App: React.FC = () => {
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Título do Objetivo</label>
               <input autoFocus value={editingMacro.title} onChange={e => setEditingMacro({...editingMacro, title: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold text-lg outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Contexto Rápido</label>
+              <input value={editingMacro.description} onChange={e => setEditingMacro({...editingMacro, description: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Notas Detalhadas</label>
+              <textarea value={editingMacro.notes || ""} onChange={e => setEditingMacro({...editingMacro, notes: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 resize-none h-48 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo Final</label>

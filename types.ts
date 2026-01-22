@@ -21,6 +21,7 @@ export interface Task {
   id: string;
   title: string;
   description: string;
+  notes?: string; // Notas detalhadas do objetivo macro
   priority: Priority;
   status: TaskStatus;
   dueDate: string;
