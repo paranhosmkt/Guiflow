@@ -38,7 +38,8 @@ import {
   BatteryFull,
   Link2,
   ExternalLink,
-  FileText
+  FileText,
+  Settings
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink } from './types';
@@ -172,12 +173,19 @@ const App: React.FC = () => {
   const [draggedSubTaskId, setDraggedSubTaskId] = useState<string | null>(null);
   const [showCelebration, setShowCelebration] = useState<{points: number} | null>(null);
 
-  const [timerSeconds, setTimerSeconds] = useState(25 * 60);
+  // Estados Pomodoro Customizáveis
+  const [workDuration, setWorkDuration] = useState(25);
+  const [shortBreakDuration, setShortBreakDuration] = useState(5);
+  const [longBreakDuration, setLongBreakDuration] = useState(45);
+  const [cyclesUntilLongBreak, setCyclesUntilLongBreak] = useState(4);
+
+  const [timerSeconds, setTimerSeconds] = useState(workDuration * 60);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [timerMode, setTimerMode] = useState<'work' | 'break'>('work');
   const [cyclesCompleted, setCyclesCompleted] = useState(0);
   const [timerFlash, setTimerFlash] = useState(false);
   const [timerBoundTaskId, setTimerBoundTaskId] = useState<string | null>(null);
+  const [showTimerSettings, setShowTimerSettings] = useState(false);
   
   const timerRef = useRef<number | null>(null);
   const lastTickRef = useRef<number>(0);
@@ -186,9 +194,8 @@ const App: React.FC = () => {
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
-  const [newTaskNotes, setNewTaskNotes] = useState("");
   const [newTaskDate, setNewTaskDate] = useState("");
-  const [taskToProject, setTaskToProject] = useState({ title: "", notes: "", points: 5, projectId: "", dueDate: "" });
+  const [taskToProject, setTaskToProject] = useState({ title: "", notes: "", link: "", points: 5, projectId: "", dueDate: "" });
   const [newReward, setNewReward] = useState({ title: "", cost: 50, icon: "🎁" });
   const [newLink, setNewLink] = useState({ title: "", url: "" });
 
@@ -272,22 +279,28 @@ const App: React.FC = () => {
       setCyclesCompleted(nextCycles);
       playAlertSound('work-end');
       
-      // Observação: O tempo totalTimeSpent agora é atualizado segundo a segundo no useEffect
-      
       setTimerMode('break');
-      if (nextCycles % 6 === 0) {
-        setTimerSeconds(45 * 60); 
-        alert("🎉 6º CICLO CONCLUÍDO! Você merece um descanso longo de 45 minutos. Recarregue as energias!");
+      // Lógica de ciclo de pausa longa configurável
+      if (nextCycles % cyclesUntilLongBreak === 0) {
+        setTimerSeconds(longBreakDuration * 60); 
+        alert(`🎉 ${cyclesUntilLongBreak}º CICLO CONCLUÍDO! Você merece um descanso longo de ${longBreakDuration} minutos. Recarregue as energias!`);
       } else {
-        setTimerSeconds(5 * 60);
-        alert(`⚡ Foco concluído (${nextCycles}/6)! Hora de 5 minutos de pausa. Beba água!`);
+        setTimerSeconds(shortBreakDuration * 60);
+        alert(`⚡ Foco concluído (Ciclo ${nextCycles % cyclesUntilLongBreak}/${cyclesUntilLongBreak})! Hora de ${shortBreakDuration} minutos de pausa. Beba água!`);
       }
     } else {
       playAlertSound('break-end');
       setTimerMode('work');
-      setTimerSeconds(25 * 60);
-      alert("🚀 Pausa concluída! Pronto para mais 25 minutos de clareza?");
+      setTimerSeconds(workDuration * 60);
+      alert("🚀 Pausa concluída! Pronto para mais um período de clareza?");
     }
+  };
+
+  const handleResetTimer = () => {
+    setIsTimerActive(false);
+    setTimerMode('work');
+    setTimerSeconds(workDuration * 60);
+    setCyclesCompleted(0);
   };
 
   const handleCreateMacro = () => {
@@ -296,7 +309,7 @@ const App: React.FC = () => {
       id: Date.now().toString(),
       title: newTaskTitle,
       description: newTaskDescription,
-      notes: newTaskNotes,
+      notes: "",
       priority: 'medium',
       status: 'todo',
       dueDate: newTaskDate || new Date().toISOString().split('T')[0],
@@ -311,7 +324,6 @@ const App: React.FC = () => {
     setTasks([...tasks, newTask]);
     setNewTaskTitle("");
     setNewTaskDescription("");
-    setNewTaskNotes("");
     setNewTaskDate("");
     setActiveModal(null);
   };
@@ -351,6 +363,7 @@ const App: React.FC = () => {
       id: Math.random().toString(36).substr(2, 9), 
       title: taskToProject.title, 
       notes: taskToProject.notes,
+      link: taskToProject.link,
       completed: false, 
       status: 'todo',
       rewardPoints: taskToProject.points,
@@ -358,7 +371,7 @@ const App: React.FC = () => {
     };
 
     setTasks(prev => prev.map(t => t.id === targetId ? { ...t, subTasks: [...t.subTasks, newSub] } : t));
-    setTaskToProject({ title: "", notes: "", points: 5, projectId: "", dueDate: "" });
+    setTaskToProject({ title: "", notes: "", link: "", points: 5, projectId: "", dueDate: "" });
     setActiveModal(null);
   };
 
@@ -397,8 +410,8 @@ const App: React.FC = () => {
     }));
   };
 
-  const handleOpenEditSubTask = (taskId: string, subTask: SubTask, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleOpenEditSubTask = (taskId: string, subTask: SubTask, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setEditingSubTask({ taskId, subTask: { ...subTask } });
     setActiveModal('edit-task');
   };
@@ -671,23 +684,6 @@ const App: React.FC = () => {
                         <h2 className="text-3xl md:text-4xl font-black mb-2 leading-tight">{activeTask.title}</h2>
                         {activeTask.description && <p className={`mb-6 italic text-sm ${textMuted}`}>"{activeTask.description}"</p>}
                         
-                        {/* Seção de Notas do Objetivo */}
-                        <div className={`mt-8 p-6 rounded-3xl border ${theme === 'light' ? 'bg-slate-50/50 border-slate-100' : 'bg-slate-800/30 border-slate-700'}`}>
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-[11px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
-                              <FileText size={14} /> Notas do Objetivo
-                            </h4>
-                            <button onClick={() => handleOpenEditMacro(activeTask)} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-500 flex items-center gap-1 transition-colors">
-                              <Pencil size={10} /> Editar Notas
-                            </button>
-                          </div>
-                          {activeTask.notes ? (
-                            <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap">{activeTask.notes}</p>
-                          ) : (
-                            <p className={`text-sm italic font-medium opacity-40 ${textMuted}`}>Nenhuma nota detalhada. Clique em editar para adicionar orientações ou rascunhos.</p>
-                          )}
-                        </div>
-
                         <div className="mt-8">
                           <div className="flex items-center justify-between mb-4">
                             <h4 className="text-[11px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
@@ -725,16 +721,94 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Timer Modificado */}
                   <div className="xl:col-span-1 flex flex-col gap-4">
                     <div className={`p-6 md:p-8 rounded-[3rem] border-2 shadow-sm flex flex-col items-center justify-center transition-all relative overflow-hidden ${timerFlash ? 'animate-pulse scale-105' : ''} ${timerMode === 'work' ? (theme === 'light' ? 'bg-rose-50 border-rose-100' : 'bg-rose-950/20 border-rose-900/50') : (theme === 'light' ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-950/20 border-emerald-900/50')}`}>
+                      
+                      {/* Configurações Rápidas do Timer */}
+                      <button 
+                        onClick={() => setShowTimerSettings(!showTimerSettings)}
+                        className={`absolute top-6 right-6 p-2 rounded-xl transition-all ${theme === 'light' ? 'bg-white/60 text-slate-400 hover:text-indigo-600' : 'bg-black/20 text-slate-500 hover:text-indigo-400'}`}
+                      >
+                        <Settings size={18} />
+                      </button>
+
                       <div className="flex items-center gap-2 mb-2">
                          {timerMode === 'work' ? <Timer className="text-rose-500" size={16} /> : <Coffee className="text-emerald-500" size={16} />}
-                         <span className={`text-[10px] font-black uppercase tracking-widest ${timerMode === 'work' ? 'text-rose-500' : 'Pausa'}`}>
-                           {timerMode === 'work' ? 'Foco Profundo' : 'Pausa'}
+                         <span className={`text-[10px] font-black uppercase tracking-widest ${timerMode === 'work' ? 'text-rose-500' : 'text-emerald-500'}`}>
+                           {timerMode === 'work' ? `Foco Profundo` : 'Pausa'}
                          </span>
                       </div>
+
+                      {/* Visualização de Ciclos */}
+                      <div className="flex gap-1 mb-2">
+                        {Array.from({ length: cyclesUntilLongBreak }).map((_, i) => (
+                          <div 
+                            key={i} 
+                            className={`w-2 h-2 rounded-full transition-all ${
+                              i < (cyclesCompleted % cyclesUntilLongBreak) 
+                                ? (timerMode === 'work' ? 'bg-rose-500' : 'bg-emerald-500') 
+                                : (theme === 'light' ? 'bg-slate-200' : 'bg-slate-800')
+                            }`} 
+                          />
+                        ))}
+                      </div>
+                      <span className={`text-[10px] font-black uppercase tracking-widest mb-2 opacity-60 ${theme === 'light' ? 'text-slate-400' : 'text-slate-500'}`}>
+                        Ciclo {(cyclesCompleted % cyclesUntilLongBreak) + 1} de {cyclesUntilLongBreak}
+                      </span>
+
                       <div className="text-5xl font-black tabular-nums tracking-tighter mb-4">{Math.floor(timerSeconds / 60).toString().padStart(2, '0')}:{(timerSeconds % 60).toString().padStart(2, '0')}</div>
                       
+                      {/* Painel de Configurações Inline */}
+                      {showTimerSettings && (
+                        <div className={`w-full mb-6 p-4 rounded-2xl border animate-in slide-in-from-top-2 duration-200 ${theme === 'light' ? 'bg-white border-slate-100' : 'bg-slate-900 border-slate-800'}`}>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[8px] font-black uppercase tracking-widest opacity-60">Foco (min)</label>
+                              <input 
+                                type="number" 
+                                value={workDuration} 
+                                onChange={(e) => setWorkDuration(Math.max(1, parseInt(e.target.value) || 1))}
+                                className={`w-full p-2 text-xs font-black rounded-lg border outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100 focus:border-indigo-200' : 'bg-slate-800 border-slate-700 focus:border-indigo-500'}`}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[8px] font-black uppercase tracking-widest opacity-60">Pausa C. (min)</label>
+                              <input 
+                                type="number" 
+                                value={shortBreakDuration} 
+                                onChange={(e) => setShortBreakDuration(Math.max(1, parseInt(e.target.value) || 1))}
+                                className={`w-full p-2 text-xs font-black rounded-lg border outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100 focus:border-indigo-200' : 'bg-slate-800 border-slate-700 focus:border-indigo-500'}`}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[8px] font-black uppercase tracking-widest opacity-60">Pausa L. (min)</label>
+                              <input 
+                                type="number" 
+                                value={longBreakDuration} 
+                                onChange={(e) => setLongBreakDuration(Math.max(1, parseInt(e.target.value) || 1))}
+                                className={`w-full p-2 text-xs font-black rounded-lg border outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100 focus:border-indigo-200' : 'bg-slate-800 border-slate-700 focus:border-indigo-500'}`}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[8px] font-black uppercase tracking-widest opacity-60">Ciclos p/ L.</label>
+                              <input 
+                                type="number" 
+                                value={cyclesUntilLongBreak} 
+                                onChange={(e) => setCyclesUntilLongBreak(Math.max(1, parseInt(e.target.value) || 1))}
+                                className={`w-full p-2 text-xs font-black rounded-lg border outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100 focus:border-indigo-200' : 'bg-slate-800 border-slate-700 focus:border-indigo-500'}`}
+                              />
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => { setShowTimerSettings(false); handleResetTimer(); }}
+                            className="w-full mt-3 py-2 text-[8px] font-black uppercase tracking-widest bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all"
+                          >
+                            Aplicar e Reiniciar
+                          </button>
+                        </div>
+                      )}
+
                       <div className={`mb-6 flex items-center gap-2 px-4 py-2 rounded-2xl ${theme === 'light' ? 'bg-white/40' : 'bg-black/20'}`}>
                         <Briefcase size={14} className="text-indigo-500" />
                         <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Acumulado: {formatTimeSpent(activeTask.totalTimeSpent)}</span>
@@ -757,7 +831,7 @@ const App: React.FC = () => {
                              </>
                            )}
                          </button>
-                         <button onClick={() => { setIsTimerActive(false); setTimerSeconds(25 * 60); setTimerMode('work'); setCyclesCompleted(0); }} className={`w-14 h-14 rounded-2xl border flex items-center justify-center transition-all shadow-sm ${theme === 'light' ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}><RotateCcw size={20} /></button>
+                         <button onClick={handleResetTimer} className={`w-14 h-14 rounded-2xl border flex items-center justify-center transition-all shadow-sm ${theme === 'light' ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}><RotateCcw size={20} /></button>
                       </div>
                     </div>
                     <button onClick={() => setActiveModal('task')} className="bg-emerald-600 text-white px-6 py-4 rounded-[2rem] font-black shadow-lg shadow-emerald-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
@@ -910,10 +984,6 @@ const App: React.FC = () => {
               <input value={newTaskDescription} onChange={e => setNewTaskDescription(e.target.value)} placeholder="Por que isso é importante?" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
-              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Notas e Orientações</label>
-              <textarea value={newTaskNotes} onChange={e => setNewTaskNotes(e.target.value)} placeholder="Descreva detalhes, ideias ou o que vier à mente..." className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 resize-none h-32 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
-            </div>
-            <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo Final</label>
               <input type="date" value={newTaskDate} onChange={e => setNewTaskDate(e.target.value)} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
@@ -968,6 +1038,11 @@ const App: React.FC = () => {
               <textarea value={taskToProject.notes} onChange={e => setTaskToProject({...taskToProject, notes: e.target.value})} placeholder="Algo para não esquecer..." className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 resize-none h-20 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
 
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Link (Opcional)</label>
+              <input value={taskToProject.link} onChange={e => setTaskToProject({...taskToProject, link: e.target.value})} placeholder="https://..." className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+
             <button onClick={handleAddTaskToProject} disabled={!taskToProject.title.trim()} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-900/20 hover:scale-[1.02] transition-all disabled:opacity-50">Adicionar à Lista</button>
           </div>
         </Modal>
@@ -984,10 +1059,6 @@ const App: React.FC = () => {
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Contexto Rápido</label>
               <input value={editingMacro.description} onChange={e => setEditingMacro({...editingMacro, description: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
-            </div>
-            <div>
-              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Notas Detalhadas</label>
-              <textarea value={editingMacro.notes || ""} onChange={e => setEditingMacro({...editingMacro, notes: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 resize-none h-48 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo Final</label>
@@ -1029,6 +1100,26 @@ const App: React.FC = () => {
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo (Opcional)</label>
               <input type="date" value={editingSubTask.subTask.dueDate || ""} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, dueDate: e.target.value}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+            </div>
+
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Link (Opcional)</label>
+              <input 
+                value={editingSubTask.subTask.link || ""} 
+                onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, link: e.target.value}})} 
+                placeholder="https://..." 
+                className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} 
+              />
+            </div>
+
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Comentários / Notas</label>
+              <textarea 
+                value={editingSubTask.subTask.notes || ""} 
+                onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, notes: e.target.value}})} 
+                placeholder="Adicione observações para esta micro-tarefa..." 
+                className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 resize-none h-24 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} 
+              />
             </div>
 
             <button onClick={handleUpdateSubTask} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl transition-all"><Save size={20} className="inline mr-2" /> Atualizar Tarefa</button>
@@ -1126,7 +1217,7 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTas
       </div>
       <div className="flex-1 space-y-4">
         {tasks.map((t: any) => (
-          <div key={t.id} draggable onDragStart={() => onDragStart(t.id)} className={`p-5 rounded-3xl shadow-sm border cursor-grab active:cursor-grabbing hover:shadow-lg transition-all group relative ${t.completed ? 'opacity-50' : ''} ${isLight ? 'bg-white border-slate-100 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-200'}`}>
+          <div key={t.id} draggable onDragStart={() => onDragStart(t.id)} onClick={() => onEditSubTask(t)} className={`p-5 rounded-3xl shadow-sm border cursor-pointer hover:shadow-lg transition-all group relative ${t.completed ? 'opacity-50' : ''} ${isLight ? 'bg-white border-slate-100 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-200'}`}>
             <div className="absolute top-2 right-2 flex items-center opacity-0 group-hover:opacity-100 transition-opacity z-10">
               <button onClick={(e) => onEditSubTask(t, e)} className="p-1.5 text-slate-400 hover:text-indigo-500 transition-colors"><Pencil size={12} /></button>
               <button onClick={(e) => { e.stopPropagation(); onDeleteSubTask(t.id); }} className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={12} /></button>
@@ -1135,7 +1226,25 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTas
                <GripVertical size={16} className={`${isLight ? 'text-slate-200 group-hover:text-slate-400' : 'text-slate-700 group-hover:text-slate-500'} mt-0.5`} />
                <div className="flex-1">
                   <p className={`font-bold leading-tight pr-8 ${t.completed ? 'line-through' : ''}`}>{t.title}</p>
-                  {t.notes && <div className="flex items-start gap-1 mt-1"><MessageSquare size={10} className="mt-1 flex-shrink-0 text-indigo-400" /><p className={`text-[10px] italic leading-tight ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>{t.notes}</p></div>}
+                  <div className="flex flex-col gap-1 mt-1">
+                    {t.notes && (
+                      <div className="flex items-start gap-1">
+                        <MessageSquare size={10} className="mt-1 flex-shrink-0 text-indigo-400" />
+                        <p className={`text-[10px] italic leading-tight ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>{t.notes}</p>
+                      </div>
+                    )}
+                    {t.link && (
+                      <a 
+                        href={t.link.startsWith('http') ? t.link : `https://${t.link}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        onClick={(e) => e.stopPropagation()} 
+                        className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 hover:underline"
+                      >
+                        <Link2 size={10} /> Link de Referência
+                      </a>
+                    )}
+                  </div>
                   <div className="flex flex-wrap items-center gap-3 mt-2">
                     <div className="flex items-center gap-1 text-[10px] font-black text-indigo-500 uppercase"><Zap size={10} fill="currentColor" /> +{t.rewardPoints} pts</div>
                     {t.dueDate && !t.completed && (

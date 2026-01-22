@@ -15,6 +15,7 @@ export interface SubTask {
   rewardPoints: number; // Points awarded when this specific sub-task is completed
   dueDate?: string; // Optional deadline for the sub-task
   notes?: string; // Comentário ou observação sobre a micro-tarefa
+  link?: string; // Link de referência para a micro-tarefa
 }
 
 export interface Task {
