@@ -7,6 +7,12 @@ export interface ProjectLink {
   url: string;
 }
 
+export interface MonthlyGoal {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
 export interface SubTask {
   id: string;
   title: string;
@@ -16,6 +22,7 @@ export interface SubTask {
   dueDate?: string; // Optional deadline for the sub-task
   notes?: string; // Comentário ou observação sobre a micro-tarefa
   link?: string; // Link de referência para a micro-tarefa
+  archived?: boolean; // Se a tarefa foi arquivada da visão local
 }
 
 export interface Task {

@@ -39,10 +39,13 @@ import {
   Link2,
   ExternalLink,
   FileText,
-  Settings
+  Settings,
+  CalendarCheck,
+  Check,
+  Archive
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink } from './types';
+import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink, MonthlyGoal } from './types';
 
 // Constantes para LocalStorage
 const STORAGE_KEYS = {
@@ -50,7 +53,8 @@ const STORAGE_KEYS = {
   COMPLETED_TASKS: 'guiflow_completed_tasks_v2',
   REWARDS: 'guiflow_rewards_v2',
   STATS: 'guiflow_stats_v2',
-  THEME: 'guiflow_theme_v2'
+  THEME: 'guiflow_theme_v2',
+  MONTHLY_GOALS: 'guiflow_monthly_goals_v2'
 };
 
 const MOTIVATION_QUOTES = [
@@ -167,6 +171,11 @@ const App: React.FC = () => {
     return (saved as 'light' | 'dark') || 'light';
   });
 
+  const [monthlyGoals, setMonthlyGoals] = useState<MonthlyGoal[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.MONTHLY_GOALS);
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [view, setView] = useState<'global' | 'local' | 'rewards' | 'history'>('global');
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [motivation, setMotivation] = useState("");
@@ -190,7 +199,7 @@ const App: React.FC = () => {
   const timerRef = useRef<number | null>(null);
   const lastTickRef = useRef<number>(0);
 
-  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | null>(null);
+  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | null>(null);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
@@ -198,6 +207,7 @@ const App: React.FC = () => {
   const [taskToProject, setTaskToProject] = useState({ title: "", notes: "", link: "", points: 5, projectId: "", dueDate: "" });
   const [newReward, setNewReward] = useState({ title: "", cost: 50, icon: "🎁" });
   const [newLink, setNewLink] = useState({ title: "", url: "" });
+  const [newMonthlyGoal, setNewMonthlyGoal] = useState("");
 
   const [editingMacro, setEditingMacro] = useState<Task | null>(null);
   const [editingSubTask, setEditingSubTask] = useState<{taskId: string, subTask: SubTask} | null>(null);
@@ -207,6 +217,7 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.REWARDS, JSON.stringify(rewards)); }, [rewards]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(stats)); }, [stats]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.THEME, theme); }, [theme]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.MONTHLY_GOALS, JSON.stringify(monthlyGoals)); }, [monthlyGoals]);
 
   useEffect(() => {
     const randomQuote = MOTIVATION_QUOTES[Math.floor(Math.random() * MOTIVATION_QUOTES.length)];
@@ -463,6 +474,37 @@ const App: React.FC = () => {
     }
   };
 
+  const handleArchiveDoneSubTasks = (taskId: string) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        return {
+          ...t,
+          subTasks: t.subTasks.map(st => st.status === 'done' ? { ...st, archived: true } : st)
+        };
+      }
+      return t;
+    }));
+  };
+
+  const handleAddMonthlyGoal = () => {
+    if (!newMonthlyGoal.trim()) return;
+    const goal: MonthlyGoal = {
+      id: Date.now().toString(),
+      text: newMonthlyGoal.trim(),
+      completed: false
+    };
+    setMonthlyGoals([...monthlyGoals, goal]);
+    setNewMonthlyGoal("");
+  };
+
+  const toggleMonthlyGoal = (id: string) => {
+    setMonthlyGoals(prev => prev.map(g => g.id === id ? { ...g, completed: !g.completed } : g));
+  };
+
+  const deleteMonthlyGoal = (id: string) => {
+    setMonthlyGoals(prev => prev.filter(g => g.id !== id));
+  };
+
   const finishMacroProject = (id: string) => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
@@ -619,9 +661,14 @@ const App: React.FC = () => {
           
           <div className="flex gap-2">
              {view === 'global' && (
+               <>
+                <button onClick={() => setActiveModal('monthly')} className={`px-6 py-3 rounded-2xl font-black shadow-lg flex items-center gap-2 transition-all hover:scale-105 active:scale-95 ${theme === 'light' ? 'bg-white text-indigo-600 border border-indigo-100 shadow-indigo-100/50' : 'bg-slate-800 text-indigo-400 border border-slate-700 shadow-black/20'}`}>
+                  <CalendarCheck size={20} /> Objetivos do Mês
+                </button>
                 <button onClick={() => setActiveModal('macro')} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-indigo-200/50 hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
                   <Plus size={20} /> Novo Objetivo
                 </button>
+               </>
              )}
              {view === 'rewards' && (
                 <button onClick={() => setActiveModal('reward')} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-purple-200/50 hover:scale-105 transition-all flex items-center gap-2">
@@ -869,7 +916,7 @@ const App: React.FC = () => {
                   <KanbanCol 
                     title="Concluído" 
                     theme={theme} 
-                    tasks={activeTask.subTasks.filter(s => s.status === 'done').sort(sortByDueDate)} 
+                    tasks={activeTask.subTasks.filter(s => s.status === 'done' && !s.archived).sort(sortByDueDate)} 
                     onDrop={() => onDrop('done')} 
                     onDragOver={(e: React.DragEvent) => e.preventDefault()} 
                     onDragStart={setDraggedSubTaskId} 
@@ -877,6 +924,7 @@ const App: React.FC = () => {
                     onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} 
                     formatDate={formatDate} 
                     isOverdue={isOverdue} 
+                    onArchive={() => handleArchiveDoneSubTasks(activeTask.id)}
                   />
                 </div>
               </>
@@ -988,6 +1036,68 @@ const App: React.FC = () => {
               <input type="date" value={newTaskDate} onChange={e => setNewTaskDate(e.target.value)} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <button onClick={handleCreateMacro} disabled={!newTaskTitle.trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-indigo-900/20 hover:scale-[1.02] transition-all disabled:opacity-50">Começar Projeto</button>
+          </div>
+        </Modal>
+      )}
+
+      {activeModal === 'monthly' && (
+        <Modal title="Objetivos do Mês" onClose={() => setActiveModal(null)} theme={theme}>
+          <div className="space-y-6">
+            <p className={`text-xs italic ${textMuted}`}>Orientação estratégica para seus objetivos macro.</p>
+            
+            <div className="flex gap-2">
+              <input 
+                autoFocus 
+                value={newMonthlyGoal} 
+                onChange={e => setNewMonthlyGoal(e.target.value)} 
+                onKeyPress={e => e.key === 'Enter' && handleAddMonthlyGoal()}
+                placeholder="Adicionar item..." 
+                className={`flex-1 p-3 border-2 rounded-xl font-bold text-sm outline-none focus:border-indigo-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} 
+              />
+              <button 
+                onClick={handleAddMonthlyGoal} 
+                disabled={!newMonthlyGoal.trim()}
+                className="bg-indigo-600 text-white p-3 rounded-xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+              {monthlyGoals.length > 0 ? (
+                monthlyGoals.map(goal => (
+                  <div key={goal.id} className={`flex items-center gap-3 p-3 rounded-xl border group transition-all ${goal.completed ? (theme === 'light' ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-950/20 border-emerald-900/40') : (theme === 'light' ? 'bg-white border-slate-100' : 'bg-slate-800/50 border-slate-700')}`}>
+                    <button 
+                      onClick={() => toggleMonthlyGoal(goal.id)}
+                      className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${goal.completed ? 'bg-emerald-500 border-emerald-500 text-white' : (theme === 'light' ? 'border-slate-300 hover:border-indigo-400' : 'border-slate-600 hover:border-indigo-500')}`}
+                    >
+                      {goal.completed && <Check size={14} />}
+                    </button>
+                    <span className={`flex-1 text-sm font-bold ${goal.completed ? 'line-through opacity-50' : ''}`}>
+                      {goal.text}
+                    </span>
+                    <button 
+                      onClick={() => deleteMonthlyGoal(goal.id)}
+                      className="p-1 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-10 opacity-40">
+                  <FileText size={40} className="mx-auto mb-2" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">Nenhum foco definido para este mês.</p>
+                </div>
+              )}
+            </div>
+            
+            <button 
+              onClick={() => setActiveModal(null)} 
+              className="w-full bg-slate-900 dark:bg-black text-white font-black py-4 rounded-2xl transition-all active:scale-95 shadow-lg"
+            >
+              Fechar Revisão
+            </button>
           </div>
         </Modal>
       )}
@@ -1179,7 +1289,7 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, the
   const isLight = theme === 'light';
   return (
     <div onClick={onFocus} className={`p-8 rounded-[3rem] border-2 transition-all cursor-pointer shadow-sm group relative flex flex-col justify-between h-72 ${isLight ? 'bg-white border-slate-50 hover:border-indigo-100' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/30'}`}>
-      <div className="absolute top-6 right-6 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute top-6 right-6 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
         <button onClick={onEdit} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors"><Pencil size={16} /></button>
         <button onClick={onDelete} className="p-2 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
       </div>
@@ -1207,12 +1317,22 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, the
   );
 };
 
-const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTask, onDeleteSubTask, formatDate, isOverdue, highlight, theme }: any) => {
+const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTask, onDeleteSubTask, formatDate, isOverdue, highlight, theme, onArchive }: any) => {
   const isLight = theme === 'light';
   return (
     <div className={`flex flex-col h-full rounded-[3rem] p-5 border-2 border-dashed ${highlight ? (isLight ? 'bg-indigo-50/20 border-indigo-100' : 'bg-indigo-950/10 border-indigo-900/30') : (isLight ? 'bg-slate-50/50 border-slate-200' : 'bg-slate-900/20 border-slate-800/50')}`} onDrop={onDrop} onDragOver={onDragOver}>
       <div className="flex items-center justify-between mb-6 px-3">
-         <h4 className={`text-[10px] font-black uppercase tracking-widest ${isLight ? 'text-slate-300' : 'text-slate-600'}`}>{title}</h4>
+         <div className="flex flex-col">
+            <h4 className={`text-[10px] font-black uppercase tracking-widest ${isLight ? 'text-slate-300' : 'text-slate-600'}`}>{title}</h4>
+            {title === "Concluído" && tasks.length > 0 && (
+              <button 
+                onClick={onArchive} 
+                className={`mt-1 flex items-center gap-1 text-[9px] font-bold uppercase transition-colors ${isLight ? 'text-indigo-400 hover:text-indigo-600' : 'text-indigo-500 hover:text-indigo-400'}`}
+              >
+                <Archive size={10} /> Arquivar
+              </button>
+            )}
+         </div>
          <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black border shadow-sm ${isLight ? 'bg-white text-slate-400 border-slate-100' : 'bg-slate-800 text-slate-500 border-slate-700'}`}>{tasks.length}</span>
       </div>
       <div className="flex-1 space-y-4">
