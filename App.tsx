@@ -615,7 +615,10 @@ const App: React.FC = () => {
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg mt-1"><Zap size={22} fill="currentColor" /></div>
             <div>
-              <h1 className="text-xl font-black tracking-tighter leading-none">GUITASK</h1>
+              <div className="flex items-center gap-1.5">
+                <h1 className="text-xl font-black tracking-tighter leading-none">GUITASK</h1>
+                <span className="text-[8px] font-black uppercase tracking-widest bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">beta</span>
+              </div>
               <p className={`text-[10px] font-bold tracking-tight mt-1 ${textMuted}`}>Clareza para mentes inquietas</p>
             </div>
           </div>
