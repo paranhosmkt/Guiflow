@@ -42,7 +42,10 @@ import {
   Settings,
   CalendarCheck,
   Check,
-  Archive
+  Archive,
+  Download,
+  Upload,
+  Undo2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink, MonthlyGoal } from './types';
@@ -198,8 +201,9 @@ const App: React.FC = () => {
   
   const timerRef = useRef<number | null>(null);
   const lastTickRef = useRef<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | null>(null);
+  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | 'settings' | null>(null);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
@@ -211,6 +215,8 @@ const App: React.FC = () => {
 
   const [editingMacro, setEditingMacro] = useState<Task | null>(null);
   const [editingSubTask, setEditingSubTask] = useState<{taskId: string, subTask: SubTask} | null>(null);
+  
+  const [undoToast, setUndoToast] = useState<{ message: string; onUndo: () => void } | null>(null);
 
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks)); }, [tasks]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.COMPLETED_TASKS, JSON.stringify(completedTasks)); }, [completedTasks]);
@@ -364,6 +370,45 @@ const App: React.FC = () => {
     if (confirm("Deseja realmente remover este registro do histórico?")) {
       setCompletedTasks(prev => prev.filter(t => t.id !== id));
     }
+  };
+  
+  const handleReactivateTask = (id: string) => {
+    const task = completedTasks.find(t => t.id === id);
+    if (!task) return;
+
+    // Remove from completed
+    setCompletedTasks(prev => prev.filter(t => t.id !== id));
+    
+    // Add back to active
+    const activeTask: Task = { ...task, status: 'todo', completed: false, completedAt: undefined };
+    setTasks(prev => [...prev, activeTask]);
+    
+    // Reverse points
+    setStats(prev => ({
+      ...prev,
+      points: Math.max(0, prev.points - task.rewardPoints),
+      tasksCompleted: Math.max(0, prev.tasksCompleted - 1)
+    }));
+
+    setView('local');
+    setActiveTaskId(task.id);
+
+    setUndoToast({
+      message: "Tarefa reativada com sucesso!",
+      onUndo: () => {
+        setTasks(prev => prev.filter(t => t.id !== id));
+        setCompletedTasks(prev => [task, ...prev]);
+        setStats(prev => ({
+            ...prev,
+            points: prev.points + task.rewardPoints,
+            tasksCompleted: prev.tasksCompleted + 1
+        }));
+        setView('history');
+        setActiveTaskId(null);
+      }
+    });
+
+    setTimeout(() => setUndoToast(null), 5000);
   };
 
   const handleAddTaskToProject = () => {
@@ -561,6 +606,61 @@ const App: React.FC = () => {
     setRewards(rewards.filter(r => r.id !== id));
   };
 
+  const handleExportData = () => {
+    const data = {
+      tasks,
+      completedTasks,
+      rewards,
+      stats,
+      monthlyGoals,
+      theme,
+      exportDate: new Date().toISOString(),
+      version: '2.0'
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `guitask-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    alert("Backup concluído! Guarde este arquivo em um local seguro.");
+  };
+
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        
+        // Validação mínima para garantir que o arquivo é do Guitask
+        if (!data.tasks || !data.stats) {
+          throw new Error("Arquivo inválido");
+        }
+
+        if (confirm("Isso substituirá todos os seus dados atuais pelos dados do backup. Continuar?")) {
+          setTasks(data.tasks);
+          setCompletedTasks(data.completedTasks || []);
+          setRewards(data.rewards || INITIAL_REWARDS);
+          setStats(data.stats);
+          setMonthlyGoals(data.monthlyGoals || []);
+          if (data.theme) setTheme(data.theme);
+          
+          alert("Dados restaurados com sucesso!");
+          setActiveModal(null);
+        }
+      } catch (err) {
+        alert("Erro ao importar: O arquivo selecionado não é um backup válido do Guitask.");
+      }
+    };
+    reader.readAsText(file);
+    // Limpar o input para permitir importar o mesmo arquivo novamente se necessário
+    e.target.value = "";
+  };
+
   const activeTask = useMemo(() => tasks.find(t => t.id === activeTaskId) || null, [tasks, activeTaskId]);
 
   const isProjectReadyToFinish = useMemo(() => {
@@ -622,9 +722,14 @@ const App: React.FC = () => {
               <p className={`text-[10px] font-bold tracking-tight mt-1 ${textMuted}`}>Clareza para mentes inquietas</p>
             </div>
           </div>
-          <button onClick={toggleTheme} className={`p-2 rounded-xl transition-colors ${theme === 'light' ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-amber-400'}`}>
-            {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setActiveModal('settings')} className={`p-2 rounded-xl transition-colors ${theme === 'light' ? 'hover:bg-slate-100 text-slate-400' : 'hover:bg-slate-800 text-slate-500'}`}>
+              <Settings size={20} />
+            </button>
+            <button onClick={toggleTheme} className={`p-2 rounded-xl transition-colors ${theme === 'light' ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-amber-400'}`}>
+              {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+            </button>
+          </div>
         </div>
         
         <div className="flex w-full justify-around md:flex-col md:gap-4">
@@ -633,9 +738,9 @@ const App: React.FC = () => {
           <NavItem active={view === 'rewards'} onClick={() => setView('rewards')} icon={<Trophy size={20} />} label="Prêmios" theme={theme} />
           <NavItem active={view === 'history'} onClick={() => setView('history')} icon={<History size={20} />} label="Histórico" theme={theme} />
           
-          <button onClick={toggleTheme} className="md:hidden flex flex-col items-center gap-1 px-4 py-2 text-slate-400">
-             {theme === 'light' ? <Moon size={20} /> : <Sun size={20} className="text-amber-400" />}
-             <span className="text-[9px] uppercase font-bold tracking-tight">Tema</span>
+          <button onClick={() => setActiveModal('settings')} className="md:hidden flex flex-col items-center gap-1 px-4 py-2 text-slate-400">
+             <Settings size={20} />
+             <span className="text-[9px] uppercase font-bold tracking-tight">Config</span>
           </button>
         </div>
 
@@ -978,8 +1083,8 @@ const App: React.FC = () => {
             {completedTasks.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {completedTasks.map(task => (
-                  <div key={task.id} className={`${bgCard} p-8 rounded-[3rem] border ${borderCard} shadow-sm flex flex-col justify-between group relative`}>
-                    <button onClick={() => handleDeleteHistoryTask(task.id)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
+                  <div key={task.id} onClick={() => handleReactivateTask(task.id)} className={`${bgCard} p-8 rounded-[3rem] border ${borderCard} shadow-sm flex flex-col justify-between group relative cursor-pointer hover:border-indigo-500 transition-all`}>
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteHistoryTask(task.id); }} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
                     <div>
                       <div className="flex items-center justify-between mb-4">
                         <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full flex items-center gap-1"><CheckCircle2 size={10} /> Concluído</span>
@@ -1006,6 +1111,25 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* Undo Toast Notification */}
+      {undoToast && (
+        <div className="fixed bottom-24 md:bottom-10 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-bottom-5">
+          <div className={`${theme === 'light' ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'} px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4`}>
+             <span className="text-sm font-bold">{undoToast.message}</span>
+             <button 
+               onClick={() => {
+                 undoToast.onUndo();
+                 setUndoToast(null);
+               }}
+               className={`text-xs font-black uppercase tracking-widest px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all ${theme === 'light' ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-200 text-slate-900 hover:bg-slate-300'}`}
+             >
+               <Undo2 size={14} /> Desfazer
+             </button>
+             <button onClick={() => setUndoToast(null)} className="opacity-50 hover:opacity-100"><X size={16} /></button>
+          </div>
+        </div>
+      )}
 
       {/* Celebration Overlay */}
       {showCelebration && (
@@ -1267,6 +1391,57 @@ const App: React.FC = () => {
              <input autoFocus value={newReward.title} onChange={e => setNewReward({...newReward, title: e.target.value})} placeholder="Nome do Prêmio" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-purple-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
              <input type="number" value={newReward.cost} onChange={e => setNewReward({...newReward, cost: parseInt(e.target.value) || 0})} className={`w-full p-4 border-2 rounded-2xl font-black text-center text-2xl text-purple-500 outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`} />
              <button onClick={handleCreateReward} disabled={!newReward.title.trim()} className="w-full bg-purple-600 text-white font-black py-5 rounded-2xl shadow-xl transition-all">Criar Prêmio</button>
+          </div>
+        </Modal>
+      )}
+
+      {activeModal === 'settings' && (
+        <Modal title="Configurações e Backup" onClose={() => setActiveModal(null)} theme={theme}>
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <h4 className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>Segurança dos Dados</h4>
+              <p className="text-xs leading-relaxed opacity-70">Baixe um backup completo para restaurar seus dados em outro navegador ou após formatar seu computador.</p>
+              
+              <div className="grid grid-cols-1 gap-3">
+                <button 
+                  onClick={handleExportData}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-indigo-600/20 bg-indigo-600/5 hover:bg-indigo-600/10 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <Download size={20} className="text-indigo-600" />
+                    <span className="font-bold text-sm">Baixar Backup</span>
+                  </div>
+                  <ChevronRight size={16} className="text-slate-300 group-hover:translate-x-1 transition-transform" />
+                </button>
+
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-emerald-600/20 bg-emerald-600/5 hover:bg-emerald-600/10 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <Upload size={20} className="text-emerald-600" />
+                    <span className="font-bold text-sm">Restaurar de Arquivo</span>
+                  </div>
+                  <ChevronRight size={16} className="text-slate-300 group-hover:translate-x-1 transition-transform" />
+                </button>
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={handleImportData} 
+                  accept=".json" 
+                  className="hidden" 
+                />
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+              <button 
+                onClick={() => setActiveModal(null)} 
+                className="w-full py-4 bg-slate-900 dark:bg-black text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg active:scale-95 transition-all"
+              >
+                Voltar
+              </button>
+            </div>
           </div>
         </Modal>
       )}
