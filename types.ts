@@ -13,6 +13,14 @@ export interface MonthlyGoal {
   completed: boolean;
 }
 
+export interface RedeemedReward {
+  id: string;
+  title: string;
+  cost: number;
+  icon: string;
+  redeemedAt: string;
+}
+
 export interface SubTask {
   id: string;
   title: string;

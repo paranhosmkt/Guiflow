@@ -45,16 +45,18 @@ import {
   Archive,
   Download,
   Upload,
-  Undo2
+  Undo2,
+  ShoppingBag
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink, MonthlyGoal } from './types';
+import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink, MonthlyGoal, RedeemedReward } from './types';
 
 // Constantes para LocalStorage
 const STORAGE_KEYS = {
   TASKS: 'guiflow_tasks_v2',
   COMPLETED_TASKS: 'guiflow_completed_tasks_v2',
   REWARDS: 'guiflow_rewards_v2',
+  REDEEMED_REWARDS: 'guiflow_redeemed_rewards_v2',
   STATS: 'guiflow_stats_v2',
   THEME: 'guiflow_theme_v2',
   MONTHLY_GOALS: 'guiflow_monthly_goals_v2'
@@ -84,7 +86,7 @@ const MOTIVATION_QUOTES = [
   "Perdoe-se pelos dias de neblina mental.",
   "A clareza vem da ação, não do pensamento excessivo.",
   "Simplifique até que pareça impossível errar.",
-  "Sua mente hiperfocada pode mover montanhas.",
+  "Sua mente hiperfocada pode mover monthas.",
   "O 'perfeito' é o inimigo do 'feito'.",
   "Dê a si mesmo a permissão para ser um iniciante.",
   "Cada tarefa concluída é um voto de confiança em você mesmo.",
@@ -164,6 +166,11 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : INITIAL_REWARDS;
   });
 
+  const [redeemedRewards, setRedeemedRewards] = useState<RedeemedReward[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.REDEEMED_REWARDS);
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [stats, setStats] = useState<UserStats>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.STATS);
     return saved ? JSON.parse(saved) : { points: 0, tasksCompleted: 0, streak: 1 };
@@ -221,6 +228,7 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks)); }, [tasks]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.COMPLETED_TASKS, JSON.stringify(completedTasks)); }, [completedTasks]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.REWARDS, JSON.stringify(rewards)); }, [rewards]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.REDEEMED_REWARDS, JSON.stringify(redeemedRewards)); }, [redeemedRewards]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(stats)); }, [stats]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.THEME, theme); }, [theme]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.MONTHLY_GOALS, JSON.stringify(monthlyGoals)); }, [monthlyGoals]);
@@ -409,6 +417,36 @@ const App: React.FC = () => {
     });
 
     setTimeout(() => setUndoToast(null), 5000);
+  };
+
+  const handleRedeemReward = (reward: Reward) => {
+    if (stats.points < reward.cost) return;
+
+    const redemption: RedeemedReward = {
+      id: Date.now().toString(),
+      title: reward.title,
+      cost: reward.cost,
+      icon: reward.icon,
+      redeemedAt: new Date().toISOString()
+    };
+
+    setStats(s => ({ ...s, points: s.points - reward.cost }));
+    setRedeemedRewards(prev => [redemption, ...prev]);
+    
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors: ['#a855f7', '#ec4899', '#6366f1']
+    });
+
+    alert(`🎉 Parabéns! Você resgatou: ${reward.title}. Aproveite seu prêmio, você mereceu!`);
+  };
+
+  const handleDeleteRedeemed = (id: string) => {
+    if (confirm("Remover este registro do histórico de resgates?")) {
+      setRedeemedRewards(prev => prev.filter(r => r.id !== id));
+    }
   };
 
   const handleAddTaskToProject = () => {
@@ -611,11 +649,12 @@ const App: React.FC = () => {
       tasks,
       completedTasks,
       rewards,
+      redeemedRewards,
       stats,
       monthlyGoals,
       theme,
       exportDate: new Date().toISOString(),
-      version: '2.0'
+      version: '2.1'
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -645,6 +684,7 @@ const App: React.FC = () => {
           setTasks(data.tasks);
           setCompletedTasks(data.completedTasks || []);
           setRewards(data.rewards || INITIAL_REWARDS);
+          setRedeemedRewards(data.redeemedRewards || []);
           setStats(data.stats);
           setMonthlyGoals(data.monthlyGoals || []);
           if (data.theme) setTheme(data.theme);
@@ -679,6 +719,11 @@ const App: React.FC = () => {
     if (!dateStr) return null;
     const [year, month, day] = dateStr.split('-');
     return `${day}/${month}`;
+  };
+
+  const formatFullDate = (isoStr: string) => {
+    const date = new Date(isoStr);
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
   const formatTimeSpent = (minutes: number = 0) => {
@@ -1046,7 +1091,7 @@ const App: React.FC = () => {
         )}
 
         {view === 'rewards' && (
-          <div className="space-y-10 animate-in fade-in duration-500">
+          <div className="space-y-12 animate-in fade-in duration-500">
             <div className={`${theme === 'light' ? 'bg-slate-900' : 'bg-black'} rounded-[3rem] p-10 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl border border-slate-800`}>
                <div>
                   <p className="text-indigo-400 font-black uppercase tracking-widest text-xs mb-2">Saldo de Recompensas</p>
@@ -1054,26 +1099,71 @@ const App: React.FC = () => {
                </div>
                <div className="w-24 h-24 bg-indigo-600 rounded-3xl flex items-center justify-center rotate-6 shadow-xl"><Trophy size={48} /></div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {rewards.map(reward => (
-                <div key={reward.id} className={`${bgCard} p-8 rounded-[2.5rem] border-2 transition-all relative group flex flex-col justify-between ${stats.points >= reward.cost ? 'border-indigo-600/20 shadow-md' : `${borderCard} opacity-60`}`}>
-                  <button onClick={() => handleDeleteReward(reward.id)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
-                  <div className="text-5xl mb-6">{reward.icon}</div>
-                  <div>
-                    <h4 className="text-xl font-black mb-1">{reward.title}</h4>
-                    <p className="text-indigo-500 font-black text-sm uppercase tracking-wider">{reward.cost} pontos</p>
+
+            {/* Vitrine de Recompensas */}
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                 <div className="p-2 bg-indigo-600/10 text-indigo-500 rounded-xl"><Gift size={24} /></div>
+                 <h3 className="text-2xl font-black">Recompensas Disponíveis</h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {rewards.map(reward => (
+                  <div key={reward.id} className={`${bgCard} p-8 rounded-[2.5rem] border-2 transition-all relative group flex flex-col justify-between ${stats.points >= reward.cost ? 'border-indigo-600/20 shadow-md' : `${borderCard} opacity-60`}`}>
+                    <button onClick={() => handleDeleteReward(reward.id)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
+                    <div className="text-5xl mb-6">{reward.icon}</div>
+                    <div>
+                      <h4 className="text-xl font-black mb-1">{reward.title}</h4>
+                      <p className="text-indigo-500 font-black text-sm uppercase tracking-wider">{reward.cost} pontos</p>
+                    </div>
+                    <button 
+                      disabled={stats.points < reward.cost}
+                      onClick={() => handleRedeemReward(reward)}
+                      className={`mt-8 w-full py-4 rounded-2xl font-black transition-all ${stats.points >= reward.cost ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-900/20' : (theme === 'light' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-800 text-slate-600 cursor-not-allowed')}`}
+                    >Resgatar</button>
                   </div>
-                  <button 
-                    disabled={stats.points < reward.cost}
-                    onClick={() => { setStats(s => ({ ...s, points: s.points - reward.cost })); alert(`Parabéns! Você resgatou: ${reward.title}`); }}
-                    className={`mt-8 w-full py-4 rounded-2xl font-black transition-all ${stats.points >= reward.cost ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-900/20' : (theme === 'light' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-800 text-slate-600 cursor-not-allowed')}`}
-                  >Resgatar</button>
+                ))}
+                <button onClick={() => setActiveModal('reward')} className={`p-8 h-full min-h-[250px] rounded-[2.5rem] border-2 border-dashed flex flex-col items-center justify-center transition-all group ${bgCard} ${borderMain} ${textMuted} hover:border-purple-600/40 hover:text-purple-500`}>
+                   <PlusCircle size={32} />
+                   <span className="font-bold text-xs uppercase mt-3 tracking-widest">Novo Prêmio</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Histórico de Resgates */}
+            <div className="space-y-6 pt-10 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                   <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl"><ShoppingBag size={24} /></div>
+                   <h3 className="text-2xl font-black">Histórico de Prêmios</h3>
                 </div>
-              ))}
-              <button onClick={() => setActiveModal('reward')} className={`p-8 h-full min-h-[250px] rounded-[2.5rem] border-2 border-dashed flex flex-col items-center justify-center transition-all group ${bgCard} ${borderMain} ${textMuted} hover:border-purple-600/40 hover:text-purple-500`}>
-                 <PlusCircle size={32} />
-                 <span className="font-bold text-xs uppercase mt-3 tracking-widest">Novo Prêmio</span>
-              </button>
+                {redeemedRewards.length > 0 && (
+                  <button onClick={() => { if(confirm("Deseja limpar todo o histórico?")) setRedeemedRewards([]); }} className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-all ${theme === 'light' ? 'bg-slate-100 text-slate-400 hover:bg-rose-50 hover:text-rose-500' : 'bg-slate-800 text-slate-500 hover:bg-rose-900/20 hover:text-rose-400'}`}>Limpar Tudo</button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {redeemedRewards.length > 0 ? (
+                  redeemedRewards.map(record => (
+                    <div key={record.id} className={`${bgCard} p-5 rounded-[2rem] border ${borderCard} flex items-center gap-4 group relative`}>
+                      <div className="text-3xl p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl">{record.icon}</div>
+                      <div className="flex-1 min-w-0">
+                         <h4 className="font-bold text-sm truncate">{record.title}</h4>
+                         <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] font-black text-indigo-500 uppercase">{record.cost} pts</span>
+                            <span className="text-[10px] text-slate-400">•</span>
+                            <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1"><Clock size={10} /> {formatFullDate(record.redeemedAt)}</span>
+                         </div>
+                      </div>
+                      <button onClick={() => handleDeleteRedeemed(record.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={14} /></button>
+                    </div>
+                  ))
+                ) : (
+                  <div className={`col-span-full py-16 text-center ${bgCard} rounded-[3rem] border-2 border-dashed ${borderMain}`}>
+                     <ShoppingBag size={40} className="text-slate-200 mx-auto mb-4" />
+                     <p className={`text-sm font-bold ${textMuted}`}>Você ainda não resgatou nenhum prêmio. Comece a acumular pontos!</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
