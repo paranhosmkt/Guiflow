@@ -46,8 +46,7 @@ export interface Task {
   completed: boolean;
   subTasks: SubTask[];
   rewardPoints: number; // Bonus points for completing the whole macro project
-  // Fix: Renamed from totalTimeSpent to totalTimeSpentSeconds to match App.tsx implementation (seconds precision)
-  totalTimeSpentSeconds?: number; // Total focused time in seconds
+  totalTimeSpent?: number; // Total focused time in minutes
   completedAt?: string; // ISO string date
   links?: ProjectLink[]; // Links para documentos, escopos, etc.
 }

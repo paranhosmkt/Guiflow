@@ -59,9 +59,7 @@ const STORAGE_KEYS = {
   REDEEMED_REWARDS: 'guiflow_redeemed_rewards_v2',
   STATS: 'guiflow_stats_v2',
   THEME: 'guiflow_theme_v2',
-  MONTHLY_GOALS: 'guiflow_monthly_goals_v2',
-  TIMER_CONFIG: 'guiflow_timer_config',
-  ACTIVE_PROJECT_TIMER: 'guiflow_active_project_timer'
+  MONTHLY_GOALS: 'guiflow_monthly_goals_v2'
 };
 
 const MOTIVATION_QUOTES = [
@@ -227,13 +225,6 @@ const App: React.FC = () => {
   
   const [undoToast, setUndoToast] = useState<{ message: string; onUndo: () => void } | null>(null);
 
-  // --- Cronômetro de Projeto Macro (Delta Time) ---
-  const [timingProjectId, setTimingProjectId] = useState<string | null>(() => localStorage.getItem(STORAGE_KEYS.ACTIVE_PROJECT_TIMER));
-  const [isProjectTimerRunning, setIsProjectTimerRunning] = useState<boolean>(() => localStorage.getItem(STORAGE_KEYS.ACTIVE_PROJECT_TIMER + '_active') === 'true');
-  const projectTimerLastTickRef = useRef<number>(Date.now());
-
-  const pomodoroLastTickRef = useRef<number>(Date.now());
-
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks)); }, [tasks]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.COMPLETED_TASKS, JSON.stringify(completedTasks)); }, [completedTasks]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.REWARDS, JSON.stringify(rewards)); }, [rewards]);
@@ -241,18 +232,6 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(stats)); }, [stats]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.THEME, theme); }, [theme]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.MONTHLY_GOALS, JSON.stringify(monthlyGoals)); }, [monthlyGoals]);
-  useEffect(() => { 
-    if (timingProjectId) localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_TIMER, timingProjectId);
-    else localStorage.removeItem(STORAGE_KEYS.ACTIVE_PROJECT_TIMER);
-    localStorage.setItem(STORAGE_KEYS.ACTIVE_PROJECT_TIMER + '_active', String(isProjectTimerRunning));
-  }, [timingProjectId, isProjectTimerRunning]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TIMER_CONFIG + '_work', String(workDuration));
-    localStorage.setItem(STORAGE_KEYS.TIMER_CONFIG + '_short', String(shortBreakDuration));
-    localStorage.setItem(STORAGE_KEYS.TIMER_CONFIG + '_long', String(longBreakDuration));
-    localStorage.setItem(STORAGE_KEYS.TIMER_CONFIG + '_cycles', String(cyclesUntilLongBreak));
-  }, [workDuration, shortBreakDuration, longBreakDuration, cyclesUntilLongBreak]);
 
   useEffect(() => {
     const randomQuote = MOTIVATION_QUOTES[Math.floor(Math.random() * MOTIVATION_QUOTES.length)];
@@ -266,63 +245,80 @@ const App: React.FC = () => {
     return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
   };
 
-  // --- Lógica de Cronômetro de Projeto Macro (Delta Time) ---
+  // Temporizador com lógica de sincronização por Delta de tempo
   useEffect(() => {
-    let interval: number;
-    if (isProjectTimerRunning && timingProjectId) {
-      projectTimerLastTickRef.current = Date.now();
-      interval = window.setInterval(() => {
-        const now = Date.now();
-        const deltaMs = now - projectTimerLastTickRef.current;
-        if (deltaMs >= 1000) {
-          const deltaSeconds = Math.floor(deltaMs / 1000);
-          projectTimerLastTickRef.current += deltaSeconds * 1000;
-          setTasks(prev => prev.map(t => 
-            t.id === timingProjectId 
-            ? { ...t, totalTimeSpentSeconds: (t.totalTimeSpentSeconds || 0) + deltaSeconds } 
-            : t
-          ));
-        }
-      }, 500);
-    }
-    return () => clearInterval(interval);
-  }, [isProjectTimerRunning, timingProjectId]);
-
-  // --- Lógica Timer Pomodoro (Delta Time) ---
-  useEffect(() => {
-    let interval: number;
     if (isTimerActive && timerSeconds > 0) {
-      pomodoroLastTickRef.current = Date.now();
-      interval = window.setInterval(() => {
+      lastTickRef.current = Date.now();
+      timerRef.current = window.setInterval(() => {
         const now = Date.now();
-        const deltaMs = now - pomodoroLastTickRef.current;
-        if (deltaMs >= 1000) {
-          const deltaSeconds = Math.floor(deltaMs / 1000);
-          pomodoroLastTickRef.current += deltaSeconds * 1000;
-          setTimerSeconds(prev => Math.max(0, prev - deltaSeconds));
+        const delta = now - lastTickRef.current;
+        const secondsElapsed = Math.floor(delta / 1000);
+        
+        if (secondsElapsed >= 1) {
+          lastTickRef.current += secondsElapsed * 1000;
+          
+          setTimerSeconds(prev => {
+            const actualSub = Math.min(prev, secondsElapsed);
+            const nextVal = prev - actualSub;
+            
+            // Se estiver em modo TRABALHO e houver uma tarefa vinculada, atualizamos o tempo real dela
+            if (timerMode === 'work' && timerBoundTaskId) {
+              setTasks(currentTasks => currentTasks.map(t => 
+                t.id === timerBoundTaskId 
+                  ? { ...t, totalTimeSpent: (t.totalTimeSpent || 0) + (actualSub / 60) } 
+                  : t
+              ));
+            }
+            
+            return nextVal;
+          });
         }
-      }, 500);
+      }, 500); // Checagem frequente para alta precisão
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
     }
-    return () => clearInterval(interval);
-  }, [isTimerActive]);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [isTimerActive, timerMode, timerBoundTaskId]);
 
   useEffect(() => {
     if (timerSeconds === 0 && isTimerActive) {
-      setIsTimerActive(false);
-      if (timerMode === 'work') {
-        const nextCycles = cyclesCompleted + 1;
-        setCyclesCompleted(nextCycles);
-        setTimerMode('break');
-        setTimerSeconds((nextCycles % cyclesUntilLongBreak === 0 ? longBreakDuration : shortBreakDuration) * 60);
-      } else {
-        setTimerMode('work');
-        setTimerSeconds(workDuration * 60);
-      }
+      handleTimerComplete();
     }
   }, [timerSeconds, isTimerActive]);
 
   const toggleTimer = () => {
+    if (!isTimerActive && timerMode === 'work' && activeTaskId) {
+      setTimerBoundTaskId(activeTaskId);
+    }
     setIsTimerActive(!isTimerActive);
+  };
+
+  const handleTimerComplete = () => {
+    setIsTimerActive(false);
+    if (timerRef.current) clearInterval(timerRef.current);
+    setTimerFlash(true);
+    setTimeout(() => setTimerFlash(false), 3000);
+
+    if (timerMode === 'work') {
+      const nextCycles = cyclesCompleted + 1;
+      setCyclesCompleted(nextCycles);
+      playAlertSound('work-end');
+      
+      setTimerMode('break');
+      // Lógica de ciclo de pausa longa configurável
+      if (nextCycles % cyclesUntilLongBreak === 0) {
+        setTimerSeconds(longBreakDuration * 60); 
+        alert(`🎉 ${cyclesUntilLongBreak}º CICLO CONCLUÍDO! Você merece um descanso longo de ${longBreakDuration} minutos. Recarregue as energias!`);
+      } else {
+        setTimerSeconds(shortBreakDuration * 60);
+        alert(`⚡ Foco concluído (Ciclo ${nextCycles % cyclesUntilLongBreak}/${cyclesUntilLongBreak})! Hora de ${shortBreakDuration} minutos de pausa. Beba água!`);
+      }
+    } else {
+      playAlertSound('break-end');
+      setTimerMode('work');
+      setTimerSeconds(workDuration * 60);
+      alert("🚀 Pausa concluída! Pronto para mais um período de clareza?");
+    }
   };
 
   const handleResetTimer = () => {
@@ -347,7 +343,7 @@ const App: React.FC = () => {
       completed: false,
       subTasks: [],
       rewardPoints: 50,
-      totalTimeSpentSeconds: 0,
+      totalTimeSpent: 0,
       links: []
     };
     setTasks([...tasks, newTask]);
@@ -388,10 +384,14 @@ const App: React.FC = () => {
     const task = completedTasks.find(t => t.id === id);
     if (!task) return;
 
+    // Remove from completed
     setCompletedTasks(prev => prev.filter(t => t.id !== id));
+    
+    // Add back to active
     const activeTask: Task = { ...task, status: 'todo', completed: false, completedAt: undefined };
     setTasks(prev => [...prev, activeTask]);
     
+    // Reverse points
     setStats(prev => ({
       ...prev,
       points: Math.max(0, prev.points - task.rewardPoints),
@@ -591,10 +591,6 @@ const App: React.FC = () => {
   const finishMacroProject = (id: string) => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
-    if (timingProjectId === id) {
-      setIsProjectTimerRunning(false);
-      setTimingProjectId(null);
-    }
     const finalizedTask: Task = {
       ...task,
       status: 'done',
@@ -678,6 +674,8 @@ const App: React.FC = () => {
     reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target?.result as string);
+        
+        // Validação mínima para garantir que o arquivo é do Guitask
         if (!data.tasks || !data.stats) {
           throw new Error("Arquivo inválido");
         }
@@ -699,16 +697,8 @@ const App: React.FC = () => {
       }
     };
     reader.readAsText(file);
+    // Limpar o input para permitir importar o mesmo arquivo novamente se necessário
     e.target.value = "";
-  };
-
-  const handleToggleProjectTimer = (id: string) => {
-    if (timingProjectId === id) {
-      setIsProjectTimerRunning(!isProjectTimerRunning);
-    } else {
-      setTimingProjectId(id);
-      setIsProjectTimerRunning(true);
-    }
   };
 
   const activeTask = useMemo(() => tasks.find(t => t.id === activeTaskId) || null, [tasks, activeTaskId]);
@@ -736,11 +726,12 @@ const App: React.FC = () => {
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  const formatTimeSpent = (seconds: number = 0) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    return `${h > 0 ? h + 'h ' : ''}${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`;
+  const formatTimeSpent = (minutes: number = 0) => {
+    if (minutes < 1) return `${Math.round(minutes * 60)}s`;
+    if (minutes < 60) return `${Math.floor(minutes)}m ${Math.round((minutes % 1) * 60)}s`;
+    const hours = Math.floor(minutes / 60);
+    const mins = Math.floor(minutes % 60);
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   };
 
   const isOverdue = (dateStr: string) => {
@@ -760,12 +751,6 @@ const App: React.FC = () => {
   const textMuted = theme === 'light' ? 'text-slate-500' : 'text-slate-400';
   const borderMain = theme === 'light' ? 'border-slate-200' : 'border-slate-800';
   const borderCard = theme === 'light' ? 'border-slate-100' : 'border-slate-800';
-
-  const inputStyles = theme === 'light' 
-    ? 'bg-white border-2 border-slate-200 text-slate-900 focus:border-indigo-500' 
-    : 'bg-slate-800 border-2 border-slate-700 text-slate-100 focus:border-indigo-400';
-
-  const timedTask = useMemo(() => tasks.find(t => t.id === timingProjectId), [tasks, timingProjectId]);
 
   return (
     <div className={`min-h-screen pb-20 md:pb-0 md:pl-64 flex flex-col transition-colors duration-300 ${bgMain} ${textMain}`}>
@@ -797,6 +782,11 @@ const App: React.FC = () => {
           <NavItem active={view === 'local'} onClick={() => setView('local')} icon={<Target size={20} />} label="Foco" theme={theme} />
           <NavItem active={view === 'rewards'} onClick={() => setView('rewards')} icon={<Trophy size={20} />} label="Prêmios" theme={theme} />
           <NavItem active={view === 'history'} onClick={() => setView('history')} icon={<History size={20} />} label="Histórico" theme={theme} />
+          
+          <button onClick={() => setActiveModal('settings')} className="md:hidden flex flex-col items-center gap-1 px-4 py-2 text-slate-400">
+             <Settings size={20} />
+             <span className="text-[9px] uppercase font-bold tracking-tight">Config</span>
+          </button>
         </div>
 
         <div className="hidden md:mt-auto md:block w-full">
@@ -805,13 +795,6 @@ const App: React.FC = () => {
             <div className="text-3xl font-black text-indigo-400 flex items-baseline gap-1">
               {stats.points} <span className="text-xs text-slate-400">pts</span>
             </div>
-            {isProjectTimerRunning && timedTask && (
-             <div className="mt-4 p-3 bg-indigo-600/20 border border-indigo-500/30 rounded-2xl">
-                <p className="text-[8px] font-black uppercase text-indigo-300">Tempo focado</p>
-                <div className="text-xs font-bold truncate">{timedTask.title}</div>
-                <div className="text-sm font-black tabular-nums mt-1">{formatTimeSpent(timedTask.totalTimeSpentSeconds)}</div>
-             </div>
-            )}
           </div>
         </div>
       </nav>
@@ -821,7 +804,7 @@ const App: React.FC = () => {
         <header className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-1">
             <h2 className="text-3xl font-black tracking-tight">
-              {view === 'global' ? 'Visão Geral' : view === 'local' ? 'Modo de Foco' : view === 'rewards' ? 'Recompensas' : 'Histórico de Conquistas'}
+              {view === 'global' ? 'Visão Geral' : view === 'local' ? 'Foco Local' : view === 'rewards' ? 'Recompensas' : 'Histórico de Conquistas'}
             </h2>
             <div className={`flex items-center gap-2 ${textMuted}`}>
               <Lightbulb size={16} className="text-amber-500" />
@@ -848,43 +831,23 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        {/* --- GLOBAL VIEW --- */}
+        {/* Render Views */}
         {view === 'global' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
             {tasks
               .filter(t => !t.completed)
               .sort(sortByDueDate)
               .map(task => (
-                <div key={task.id} onClick={() => { setActiveTaskId(task.id); setView('local'); }} className={`p-8 rounded-[3rem] border-2 transition-all cursor-pointer shadow-sm group relative flex flex-col justify-between h-80 ${theme === 'light' ? 'bg-white border-slate-50 hover:border-indigo-100' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/30'} ${timingProjectId === task.id && isProjectTimerRunning ? 'ring-2 ring-indigo-500' : ''}`}>
-                <div className="absolute top-6 right-6 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                  <button onClick={(e) => { e.stopPropagation(); handleToggleProjectTimer(task.id); }} className={`p-2 rounded-lg transition-colors ${timingProjectId === task.id && isProjectTimerRunning ? 'text-rose-600 bg-rose-50' : 'text-emerald-600 bg-emerald-50'}`}>
-                    {timingProjectId === task.id && isProjectTimerRunning ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); handleOpenEditMacro(task, e); }} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors"><Pencil size={16} /></button>
-                  <button onClick={(e) => handleDeleteMacro(task.id, e)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
-                </div>
-                <div>
-                  <div className="mb-4 flex flex-wrap gap-2">
-                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${theme === 'light' ? 'bg-slate-50 text-slate-400' : 'bg-slate-800 text-slate-500'}`}>Projeto</span>
-                    {task.dueDate && (
-                      <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg flex items-center gap-1 ${isOverdue(task.dueDate) ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
-                        <Calendar size={10} /> {formatDate(task.dueDate)}
-                      </span>
-                    )}
-                    {task.totalTimeSpentSeconds > 0 && <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-indigo-600/10 text-indigo-700 flex items-center gap-1"><Timer size={10} /> {formatTimeSpent(task.totalTimeSpentSeconds)}</span>}
-                  </div>
-                  <h3 className={`text-xl font-black leading-tight group-hover:text-indigo-500 transition-colors line-clamp-2 pr-12 ${theme === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>{task.title}</h3>
-                </div>
-                <div className="mt-auto pt-6">
-                  <div className="flex justify-between items-end mb-2">
-                    <span className={`text-[10px] font-black uppercase tracking-widest ${theme === 'light' ? 'text-slate-400' : 'text-slate-500'}`}>{task.subTasks.filter(s => s.completed).length}/{task.subTasks.length} tarefas</span>
-                    <span className="text-sm font-black text-indigo-500">{Math.round(task.subTasks.length > 0 ? (task.subTasks.filter(s => s.completed).length / task.subTasks.length) * 100 : 0)}%</span>
-                  </div>
-                  <div className={`w-full h-3 rounded-full overflow-hidden p-0.5 border ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`}>
-                    <div className="h-full bg-indigo-600 rounded-full transition-all duration-700 ease-out" style={{ width: `${task.subTasks.length > 0 ? (task.subTasks.filter(s => s.completed).length / task.subTasks.length) * 100 : 0}%` }} />
-                  </div>
-                </div>
-              </div>
+                <MacroCard 
+                  key={task.id} 
+                  task={task} 
+                  theme={theme} 
+                  onFocus={() => { setActiveTaskId(task.id); setView('local'); }} 
+                  onEdit={(e: React.MouseEvent) => handleOpenEditMacro(task, e)}
+                  onDelete={(e: React.MouseEvent) => handleDeleteMacro(task.id, e)} 
+                  formatDate={formatDate} 
+                  isOverdue={isOverdue} 
+                />
             ))}
             {tasks.filter(t => !t.completed).length === 0 && (
               <div className={`col-span-full py-24 text-center ${bgCard} rounded-[3rem] border-2 border-dashed ${borderMain} flex flex-col items-center`}>
@@ -896,7 +859,6 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* --- LOCAL VIEW --- */}
         {view === 'local' && (
           <div className="space-y-8 animate-in fade-in duration-300">
             {activeTask ? (
@@ -910,7 +872,14 @@ const App: React.FC = () => {
                             <ArrowLeft size={10} /> Voltar
                           </button>
                           <span className="bg-indigo-600/10 text-indigo-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Foco Atual</span>
-                          <span className="bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-300 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><Timer size={10} /> {formatTimeSpent(activeTask.totalTimeSpentSeconds)}</span>
+                          {activeTask.dueDate && (
+                            <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isOverdue(activeTask.dueDate) ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                              <Calendar size={10} /> Prazo: {formatDate(activeTask.dueDate)}
+                            </span>
+                          )}
+                          <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${theme === 'light' ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-300'}`}>
+                            <Clock size={10} /> Tempo Total: {formatTimeSpent(activeTask.totalTimeSpent)}
+                          </span>
                         </div>
                         <h2 className="text-3xl md:text-4xl font-black mb-2 leading-tight">{activeTask.title}</h2>
                         {activeTask.description && <p className={`mb-6 italic text-sm ${textMuted}`}>"{activeTask.description}"</p>}
@@ -945,7 +914,6 @@ const App: React.FC = () => {
                       </div>
                       <button 
                         onClick={() => finishMacroProject(activeTask.id)} 
-                        disabled={!isProjectReadyToFinish}
                         className={`whitespace-nowrap px-8 py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-xl ${isProjectReadyToFinish ? 'scale-110' : ''} ${theme === 'light' ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-indigo-600 text-white shadow-indigo-900/40'} ${!isProjectReadyToFinish ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105 active:scale-95'}`}
                       >
                         <CheckCircle2 size={20} className={theme === 'light' ? 'text-indigo-400' : 'text-white'} /> Finalizar Objetivo (+{activeTask.rewardPoints} pts)
@@ -953,10 +921,11 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Timer Card Pomodoro */}
+                  {/* Timer Modificado */}
                   <div className="xl:col-span-1 flex flex-col gap-4">
-                    <div className={`p-6 md:p-8 rounded-[3rem] border-2 shadow-sm flex flex-col items-center justify-center transition-all relative overflow-hidden ${timerMode === 'work' ? (theme === 'light' ? 'bg-rose-50 border-rose-100' : 'bg-rose-950/20 border-rose-900/50') : (theme === 'light' ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-950/20 border-emerald-900/50')}`}>
+                    <div className={`p-6 md:p-8 rounded-[3rem] border-2 shadow-sm flex flex-col items-center justify-center transition-all relative overflow-hidden ${timerFlash ? 'animate-pulse scale-105' : ''} ${timerMode === 'work' ? (theme === 'light' ? 'bg-rose-50 border-rose-100' : 'bg-rose-950/20 border-rose-900/50') : (theme === 'light' ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-950/20 border-emerald-900/50')}`}>
                       
+                      {/* Configurações Rápidas do Timer */}
                       <button 
                         onClick={() => setShowTimerSettings(!showTimerSettings)}
                         className={`absolute top-6 right-6 p-2 rounded-xl transition-all ${theme === 'light' ? 'bg-white/60 text-slate-400 hover:text-indigo-600' : 'bg-black/20 text-slate-500 hover:text-indigo-400'}`}
@@ -971,6 +940,7 @@ const App: React.FC = () => {
                          </span>
                       </div>
 
+                      {/* Visualização de Ciclos */}
                       <div className="flex gap-1 mb-2">
                         {Array.from({ length: cyclesUntilLongBreak }).map((_, i) => (
                           <div 
@@ -989,8 +959,7 @@ const App: React.FC = () => {
 
                       <div className="text-5xl font-black tabular-nums tracking-tighter mb-4">{Math.floor(timerSeconds / 60).toString().padStart(2, '0')}:{(timerSeconds % 60).toString().padStart(2, '0')}</div>
                       
-                      <div className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 mb-4 flex items-center gap-1"><Timer size={10} /> {formatTimeSpent(activeTask.totalTimeSpentSeconds)} acumulados</div>
-
+                      {/* Painel de Configurações Inline */}
                       {showTimerSettings && (
                         <div className={`w-full mb-6 p-4 rounded-2xl border animate-in slide-in-from-top-2 duration-200 ${theme === 'light' ? 'bg-white border-slate-100' : 'bg-slate-900 border-slate-800'}`}>
                           <div className="grid grid-cols-2 gap-3">
@@ -1000,7 +969,7 @@ const App: React.FC = () => {
                                 type="number" 
                                 value={workDuration} 
                                 onChange={(e) => setWorkDuration(Math.max(1, parseInt(e.target.value) || 1))}
-                                className={`w-full p-2 text-xs font-black rounded-lg border outline-none ${inputStyles}`}
+                                className={`w-full p-2 text-xs font-black rounded-lg border outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100 focus:border-indigo-200' : 'bg-slate-800 border-slate-700 focus:border-indigo-500'}`}
                               />
                             </div>
                             <div className="space-y-1">
@@ -1009,7 +978,7 @@ const App: React.FC = () => {
                                 type="number" 
                                 value={shortBreakDuration} 
                                 onChange={(e) => setShortBreakDuration(Math.max(1, parseInt(e.target.value) || 1))}
-                                className={`w-full p-2 text-xs font-black rounded-lg border outline-none ${inputStyles}`}
+                                className={`w-full p-2 text-xs font-black rounded-lg border outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100 focus:border-indigo-200' : 'bg-slate-800 border-slate-700 focus:border-indigo-500'}`}
                               />
                             </div>
                             <div className="space-y-1">
@@ -1018,7 +987,7 @@ const App: React.FC = () => {
                                 type="number" 
                                 value={longBreakDuration} 
                                 onChange={(e) => setLongBreakDuration(Math.max(1, parseInt(e.target.value) || 1))}
-                                className={`w-full p-2 text-xs font-black rounded-lg border outline-none ${inputStyles}`}
+                                className={`w-full p-2 text-xs font-black rounded-lg border outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100 focus:border-indigo-200' : 'bg-slate-800 border-slate-700 focus:border-indigo-500'}`}
                               />
                             </div>
                             <div className="space-y-1">
@@ -1027,7 +996,7 @@ const App: React.FC = () => {
                                 type="number" 
                                 value={cyclesUntilLongBreak} 
                                 onChange={(e) => setCyclesUntilLongBreak(Math.max(1, parseInt(e.target.value) || 1))}
-                                className={`w-full p-2 text-xs font-black rounded-lg border outline-none ${inputStyles}`}
+                                className={`w-full p-2 text-xs font-black rounded-lg border outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100 focus:border-indigo-200' : 'bg-slate-800 border-slate-700 focus:border-indigo-500'}`}
                               />
                             </div>
                           </div>
@@ -1039,6 +1008,11 @@ const App: React.FC = () => {
                           </button>
                         </div>
                       )}
+
+                      <div className={`mb-6 flex items-center gap-2 px-4 py-2 rounded-2xl ${theme === 'light' ? 'bg-white/40' : 'bg-black/20'}`}>
+                        <Briefcase size={14} className="text-indigo-500" />
+                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Acumulado: {formatTimeSpent(activeTask.totalTimeSpent)}</span>
+                      </div>
 
                       <div className="flex gap-3 w-full">
                          <button 
@@ -1053,7 +1027,7 @@ const App: React.FC = () => {
                            ) : (
                              <>
                                <Play size={20} fill="currentColor" />
-                               <span className="text-xs uppercase tracking-widest">Focar</span>
+                               <span className="text-xs uppercase tracking-widest">Continuar</span>
                              </>
                            )}
                          </button>
@@ -1116,7 +1090,6 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* --- REWARDS VIEW --- */}
         {view === 'rewards' && (
           <div className="space-y-12 animate-in fade-in duration-500">
             <div className={`${theme === 'light' ? 'bg-slate-900' : 'bg-black'} rounded-[3rem] p-10 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl border border-slate-800`}>
@@ -1127,6 +1100,7 @@ const App: React.FC = () => {
                <div className="w-24 h-24 bg-indigo-600 rounded-3xl flex items-center justify-center rotate-6 shadow-xl"><Trophy size={48} /></div>
             </div>
 
+            {/* Vitrine de Recompensas */}
             <div className="space-y-6">
               <div className="flex items-center gap-3">
                  <div className="p-2 bg-indigo-600/10 text-indigo-500 rounded-xl"><Gift size={24} /></div>
@@ -1135,7 +1109,7 @@ const App: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {rewards.map(reward => (
                   <div key={reward.id} className={`${bgCard} p-8 rounded-[2.5rem] border-2 transition-all relative group flex flex-col justify-between ${stats.points >= reward.cost ? 'border-indigo-600/20 shadow-md' : `${borderCard} opacity-60`}`}>
-                    <button onClick={() => { if(confirm("Excluir?")) setRewards(rs => rs.filter(r => r.id !== reward.id)); }} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
+                    <button onClick={() => handleDeleteReward(reward.id)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
                     <div className="text-5xl mb-6">{reward.icon}</div>
                     <div>
                       <h4 className="text-xl font-black mb-1">{reward.title}</h4>
@@ -1155,11 +1129,12 @@ const App: React.FC = () => {
               </div>
             </div>
 
+            {/* Histórico de Resgates */}
             <div className="space-y-6 pt-10 border-t border-slate-200 dark:border-slate-800">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                    <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl"><ShoppingBag size={24} /></div>
-                   <h3 className="text-2xl font-black">Histórico de prêmios</h3>
+                   <h3 className="text-2xl font-black">Histórico de Prêmios</h3>
                 </div>
                 {redeemedRewards.length > 0 && (
                   <button onClick={() => { if(confirm("Deseja limpar todo o histórico?")) setRedeemedRewards([]); }} className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-all ${theme === 'light' ? 'bg-slate-100 text-slate-400 hover:bg-rose-50 hover:text-rose-500' : 'bg-slate-800 text-slate-500 hover:bg-rose-900/20 hover:text-rose-400'}`}>Limpar Tudo</button>
@@ -1193,7 +1168,6 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* --- HISTORY VIEW --- */}
         {view === 'history' && (
           <div className="space-y-6 animate-in fade-in duration-500">
             {completedTasks.length > 0 ? (
@@ -1208,7 +1182,7 @@ const App: React.FC = () => {
                       </div>
                       <h3 className="text-xl font-black mb-3 pr-8">{task.title}</h3>
                       <div className={`flex items-center gap-4 ${textMuted}`}>
-                        <div className="flex items-center gap-1 text-[11px] font-bold"><Clock size={14} className="text-indigo-500" /><span>Tempo Focado: {formatTimeSpent(task.totalTimeSpentSeconds)}</span></div>
+                        <div className="flex items-center gap-1 text-[11px] font-bold"><Clock size={14} className="text-indigo-500" /><span>Tempo Focado: {formatTimeSpent(task.totalTimeSpent)}</span></div>
                       </div>
                     </div>
                     <div className={`mt-6 pt-6 border-t ${borderCard} flex items-center justify-between`}>
@@ -1254,7 +1228,7 @@ const App: React.FC = () => {
            <div className={`relative p-12 rounded-[4rem] text-center shadow-2xl animate-in zoom-in-95 duration-500 flex flex-col items-center border ${theme === 'light' ? 'bg-white border-white' : 'bg-slate-900 border-slate-800'}`}>
               <div className="w-24 h-24 bg-amber-400 rounded-full flex items-center justify-center mb-6 shadow-xl animate-bounce"><Star size={48} className="text-white" fill="currentColor" /></div>
               <h2 className="text-4xl font-black tracking-tighter mb-2">OBJETIVO ALCANÇADO!</h2>
-              <div className="bg-indigo-700 text-white px-8 py-4 rounded-3xl flex items-center gap-3 shadow-lg shadow-indigo-900/30">
+              <div className="bg-indigo-600 text-white px-8 py-4 rounded-3xl flex items-center gap-3 shadow-lg shadow-indigo-900/30">
                  <Zap size={32} fill="currentColor" />
                  <div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest opacity-70">Recompensa Extra</span><div className="text-2xl font-black leading-none">+{showCelebration.points} PONTOS</div></div>
               </div>
@@ -1268,15 +1242,15 @@ const App: React.FC = () => {
           <div className="space-y-6">
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Título do Objetivo</label>
-              <input autoFocus value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} placeholder="Ex: Organizar o Escritório" className={`w-full p-4 border-2 rounded-2xl font-bold text-lg outline-none focus:border-indigo-600 transition-colors ${inputStyles}`} />
+              <input autoFocus value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} placeholder="Ex: Organizar o Escritório" className={`w-full p-4 border-2 rounded-2xl font-bold text-lg outline-none focus:border-indigo-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Contexto Rápido</label>
-              <input value={newTaskDescription} onChange={e => setNewTaskDescription(e.target.value)} placeholder="Por que isso é importante?" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${inputStyles}`} />
+              <input value={newTaskDescription} onChange={e => setNewTaskDescription(e.target.value)} placeholder="Por que isso é importante?" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo Final</label>
-              <input type="date" value={newTaskDate} onChange={e => setNewTaskDate(e.target.value)} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${inputStyles}`} />
+              <input type="date" value={newTaskDate} onChange={e => setNewTaskDate(e.target.value)} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <button onClick={handleCreateMacro} disabled={!newTaskTitle.trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-indigo-900/20 hover:scale-[1.02] transition-all disabled:opacity-50">Começar Projeto</button>
           </div>
@@ -1295,7 +1269,7 @@ const App: React.FC = () => {
                 onChange={e => setNewMonthlyGoal(e.target.value)} 
                 onKeyPress={e => e.key === 'Enter' && handleAddMonthlyGoal()}
                 placeholder="Adicionar item..." 
-                className={`flex-1 p-3 border-2 rounded-xl font-bold text-sm outline-none focus:border-indigo-600 transition-colors ${inputStyles}`} 
+                className={`flex-1 p-3 border-2 rounded-xl font-bold text-sm outline-none focus:border-indigo-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} 
               />
               <button 
                 onClick={handleAddMonthlyGoal} 
@@ -1350,7 +1324,7 @@ const App: React.FC = () => {
           <div className="space-y-6">
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>O que precisa ser feito?</label>
-              <input autoFocus value={taskToProject.title} onChange={e => setTaskToProject({...taskToProject, title: e.target.value})} placeholder="Ex: Tirar o lixo da mesa" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${inputStyles}`} />
+              <input autoFocus value={taskToProject.title} onChange={e => setTaskToProject({...taskToProject, title: e.target.value})} placeholder="Ex: Tirar o lixo da mesa" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             
             <div>
@@ -1383,17 +1357,17 @@ const App: React.FC = () => {
 
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo da Tarefa (Opcional)</label>
-              <input type="date" value={taskToProject.dueDate} onChange={e => setTaskToProject({...taskToProject, dueDate: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${inputStyles}`} />
+              <input type="date" value={taskToProject.dueDate} onChange={e => setTaskToProject({...taskToProject, dueDate: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
 
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Observação (Opcional)</label>
-              <textarea value={taskToProject.notes} onChange={e => setTaskToProject({...taskToProject, notes: e.target.value})} placeholder="Algo para não esquecer..." className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 resize-none h-20 ${inputStyles}`} />
+              <textarea value={taskToProject.notes} onChange={e => setTaskToProject({...taskToProject, notes: e.target.value})} placeholder="Algo para não esquecer..." className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 resize-none h-20 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
 
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Link (Opcional)</label>
-              <input value={taskToProject.link} onChange={e => setTaskToProject({...taskToProject, link: e.target.value})} placeholder="https://..." className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${inputStyles}`} />
+              <input value={taskToProject.link} onChange={e => setTaskToProject({...taskToProject, link: e.target.value})} placeholder="https://..." className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
 
             <button onClick={handleAddTaskToProject} disabled={!taskToProject.title.trim()} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-900/20 hover:scale-[1.02] transition-all disabled:opacity-50">Adicionar à Lista</button>
@@ -1407,15 +1381,15 @@ const App: React.FC = () => {
           <div className="space-y-6">
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Título do Objetivo</label>
-              <input autoFocus value={editingMacro.title} onChange={e => setEditingMacro({...editingMacro, title: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold text-lg outline-none focus:border-indigo-600 ${inputStyles}`} />
+              <input autoFocus value={editingMacro.title} onChange={e => setEditingMacro({...editingMacro, title: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold text-lg outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Contexto Rápido</label>
-              <input value={editingMacro.description} onChange={e => setEditingMacro({...editingMacro, description: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${inputStyles}`} />
+              <input value={editingMacro.description} onChange={e => setEditingMacro({...editingMacro, description: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo Final</label>
-              <input type="date" value={editingMacro.dueDate} onChange={e => setEditingMacro({...editingMacro, dueDate: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${inputStyles}`} />
+              <input type="date" value={editingMacro.dueDate} onChange={e => setEditingMacro({...editingMacro, dueDate: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <button onClick={handleUpdateMacro} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl transition-all">Salvar Alterações</button>
           </div>
@@ -1427,7 +1401,7 @@ const App: React.FC = () => {
           <div className="space-y-6">
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Título da Tarefa</label>
-              <input autoFocus value={editingSubTask.subTask.title} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, title: e.target.value}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${inputStyles}`} />
+              <input autoFocus value={editingSubTask.subTask.title} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, title: e.target.value}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             
             <div>
@@ -1452,7 +1426,7 @@ const App: React.FC = () => {
 
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Prazo (Opcional)</label>
-              <input type="date" value={editingSubTask.subTask.dueDate || ""} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, dueDate: e.target.value}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${inputStyles}`} />
+              <input type="date" value={editingSubTask.subTask.dueDate || ""} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, dueDate: e.target.value}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
 
             <div>
@@ -1461,7 +1435,7 @@ const App: React.FC = () => {
                 value={editingSubTask.subTask.link || ""} 
                 onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, link: e.target.value}})} 
                 placeholder="https://..." 
-                className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${inputStyles}`} 
+                className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} 
               />
             </div>
 
@@ -1471,7 +1445,7 @@ const App: React.FC = () => {
                 value={editingSubTask.subTask.notes || ""} 
                 onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, notes: e.target.value}})} 
                 placeholder="Adicione observações para esta micro-tarefa..." 
-                className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 resize-none h-24 ${inputStyles}`} 
+                className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 resize-none h-24 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} 
               />
             </div>
 
@@ -1485,11 +1459,11 @@ const App: React.FC = () => {
           <div className="space-y-6">
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Nome do Link (ex: Documento de Escopo)</label>
-              <input autoFocus value={newLink.title} onChange={e => setNewLink({...newLink, title: e.target.value})} placeholder="Ex: Referência Visual" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 transition-colors ${inputStyles}`} />
+              <input autoFocus value={newLink.title} onChange={e => setNewLink({...newLink, title: e.target.value})} placeholder="Ex: Referência Visual" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>URL (Link Completo)</label>
-              <input value={newLink.url} onChange={e => setNewLink({...newLink, url: e.target.value})} placeholder="Ex: google.com" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 transition-colors ${inputStyles}`} />
+              <input value={newLink.url} onChange={e => setNewLink({...newLink, url: e.target.value})} placeholder="Ex: google.com" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <button onClick={handleAddLink} disabled={!newLink.title.trim() || !newLink.url.trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl active:scale-95 transition-all disabled:opacity-50">Salvar Link</button>
           </div>
@@ -1504,7 +1478,7 @@ const App: React.FC = () => {
                  <button key={emoji} onClick={() => setNewReward({...newReward, icon: emoji})} className={`text-2xl p-2 rounded-xl transition-all ${newReward.icon === emoji ? 'bg-white shadow-md scale-110 border-2 border-purple-200' : 'hover:bg-black/5'}`}>{emoji}</button>
                ))}
              </div>
-             <input autoFocus value={newReward.title} onChange={e => setNewReward({...newReward, title: e.target.value})} placeholder="Nome do Prêmio" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-purple-600 ${inputStyles}`} />
+             <input autoFocus value={newReward.title} onChange={e => setNewReward({...newReward, title: e.target.value})} placeholder="Nome do Prêmio" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-purple-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
              <input type="number" value={newReward.cost} onChange={e => setNewReward({...newReward, cost: parseInt(e.target.value) || 0})} className={`w-full p-4 border-2 rounded-2xl font-black text-center text-2xl text-purple-500 outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`} />
              <button onClick={handleCreateReward} disabled={!newReward.title.trim()} className="w-full bg-purple-600 text-white font-black py-5 rounded-2xl shadow-xl transition-all">Criar Prêmio</button>
           </div>
@@ -1573,6 +1547,41 @@ const NavItem = ({ active, onClick, icon, label, theme }: any) => {
       {icon}
       <span className="text-[9px] md:text-sm uppercase md:capitalize font-bold tracking-tight">{label}</span>
     </button>
+  );
+};
+
+const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, theme }: any) => {
+  const completed = task.subTasks.filter((s:any) => s.completed).length;
+  const total = task.subTasks.length;
+  const pct = total > 0 ? (completed / total) * 100 : 0;
+  const isLight = theme === 'light';
+  return (
+    <div onClick={onFocus} className={`p-8 rounded-[3rem] border-2 transition-all cursor-pointer shadow-sm group relative flex flex-col justify-between h-72 ${isLight ? 'bg-white border-slate-50 hover:border-indigo-100' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/30'}`}>
+      <div className="absolute top-6 right-6 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <button onClick={onEdit} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors"><Pencil size={16} /></button>
+        <button onClick={onDelete} className="p-2 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
+      </div>
+      <div>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${isLight ? 'bg-slate-50 text-slate-400' : 'bg-slate-800 text-slate-500'}`}>Projeto</span>
+          {task.dueDate && (
+            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg flex items-center gap-1 ${isOverdue(task.dueDate) ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+              <Calendar size={10} /> {formatDate(task.dueDate)}
+            </span>
+          )}
+        </div>
+        <h3 className={`text-xl font-black leading-tight group-hover:text-indigo-500 transition-colors line-clamp-2 pr-12 ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>{task.title}</h3>
+      </div>
+      <div className="mt-auto pt-6">
+        <div className="flex justify-between items-end mb-2">
+          <span className={`text-[10px] font-black uppercase tracking-widest ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>{completed}/{total} tarefas</span>
+          <span className="text-sm font-black text-indigo-500">{Math.round(pct)}%</span>
+        </div>
+        <div className={`w-full h-3 rounded-full overflow-hidden p-0.5 border ${isLight ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`}>
+          <div className="h-full bg-indigo-600 rounded-full transition-all duration-700 ease-out" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+    </div>
   );
 };
 
