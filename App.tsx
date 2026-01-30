@@ -46,7 +46,9 @@ import {
   Download,
   Upload,
   Undo2,
-  ShoppingBag
+  ShoppingBag,
+  TrendingUp,
+  Maximize2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink, MonthlyGoal, RedeemedReward } from './types';
@@ -79,7 +81,7 @@ const MOTIVATION_QUOTES = [
   "Respeite seu ritmo; até a lua tem fases.",
   "Focar no 'como' é mais importante do que focar no 'quanto'.",
   "A paralisia da análise resolve-se com o primeiro movimento.",
-  "Você não é preguiçoso, você está gerenciando uma carga cognitiva imensa.",
+  "Você não é preguizoso, você está gerenciando uma carga cognitiva imensa.",
   "Hoje é um novo dia para tentar de um jeito diferente.",
   "A criatividade é o seu superpoder secreto.",
   "Organização é uma ferramenta, não um destino final.",
@@ -186,7 +188,7 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [view, setView] = useState<'global' | 'local' | 'rewards' | 'history'>('global');
+  const [view, setView] = useState<'global' | 'local' | 'rewards' | 'history' | 'metrics'>('global');
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [motivation, setMotivation] = useState("");
   const [draggedSubTaskId, setDraggedSubTaskId] = useState<string | null>(null);
@@ -210,7 +212,7 @@ const App: React.FC = () => {
   const lastTickRef = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | 'settings' | null>(null);
+  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | 'settings' | 'history-all' | null>(null);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
@@ -752,6 +754,27 @@ const App: React.FC = () => {
   const borderMain = theme === 'light' ? 'border-slate-200' : 'border-slate-800';
   const borderCard = theme === 'light' ? 'border-slate-100' : 'border-slate-800';
 
+  const chartData = useMemo(() => {
+    if (completedTasks.length === 0) return [];
+    const maxTime = Math.max(...completedTasks.map(t => t.totalTimeSpent || 0), 1);
+    return completedTasks.map(t => ({
+      title: t.title,
+      time: t.totalTimeSpent || 0,
+      percentage: ((t.totalTimeSpent || 0) / maxTime) * 100
+    }));
+  }, [completedTasks]);
+
+  const activeChartData = useMemo(() => {
+    const activeTasks = tasks.filter(t => !t.completed);
+    if (activeTasks.length === 0) return [];
+    const maxTime = Math.max(...activeTasks.map(t => t.totalTimeSpent || 0), 1);
+    return activeTasks.map(t => ({
+      title: t.title,
+      time: t.totalTimeSpent || 0,
+      percentage: ((t.totalTimeSpent || 0) / maxTime) * 100
+    }));
+  }, [tasks]);
+
   return (
     <div className={`min-h-screen pb-20 md:pb-0 md:pl-64 flex flex-col transition-colors duration-300 ${bgMain} ${textMain}`}>
       {/* Sidebar */}
@@ -781,6 +804,7 @@ const App: React.FC = () => {
           <NavItem active={view === 'global'} onClick={() => setView('global')} icon={<LayoutDashboard size={20} />} label="Geral" theme={theme} />
           <NavItem active={view === 'local'} onClick={() => setView('local')} icon={<Target size={20} />} label="Foco" theme={theme} />
           <NavItem active={view === 'rewards'} onClick={() => setView('rewards')} icon={<Trophy size={20} />} label="Prêmios" theme={theme} />
+          <NavItem active={view === 'metrics'} onClick={() => setView('metrics')} icon={<TrendingUp size={20} />} label="Métricas" theme={theme} />
           <NavItem active={view === 'history'} onClick={() => setView('history')} icon={<History size={20} />} label="Histórico" theme={theme} />
           
           <button onClick={() => setActiveModal('settings')} className="md:hidden flex flex-col items-center gap-1 px-4 py-2 text-slate-400">
@@ -804,7 +828,7 @@ const App: React.FC = () => {
         <header className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-1">
             <h2 className="text-3xl font-black tracking-tight">
-              {view === 'global' ? 'Visão Geral' : view === 'local' ? 'Foco Local' : view === 'rewards' ? 'Recompensas' : 'Histórico de Conquistas'}
+              {view === 'global' ? 'Visão Geral' : view === 'local' ? 'Foco Local' : view === 'rewards' ? 'Recompensas' : view === 'metrics' ? 'Métricas de Foco' : 'Histórico de Conquistas'}
             </h2>
             <div className={`flex items-center gap-2 ${textMuted}`}>
               <Lightbulb size={16} className="text-amber-500" />
@@ -847,6 +871,7 @@ const App: React.FC = () => {
                   onDelete={(e: React.MouseEvent) => handleDeleteMacro(task.id, e)} 
                   formatDate={formatDate} 
                   isOverdue={isOverdue} 
+                  formatTimeSpent={formatTimeSpent}
                 />
             ))}
             {tasks.filter(t => !t.completed).length === 0 && (
@@ -1134,7 +1159,7 @@ const App: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                    <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl"><ShoppingBag size={24} /></div>
-                   <h3 className="text-2xl font-black">Histórico de Prêmios</h3>
+                   <h3 className="text-2xl font-black">Histórico de prêmios</h3>
                 </div>
                 {redeemedRewards.length > 0 && (
                   <button onClick={() => { if(confirm("Deseja limpar todo o histórico?")) setRedeemedRewards([]); }} className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-all ${theme === 'light' ? 'bg-slate-100 text-slate-400 hover:bg-rose-50 hover:text-rose-500' : 'bg-slate-800 text-slate-500 hover:bg-rose-900/20 hover:text-rose-400'}`}>Limpar Tudo</button>
@@ -1168,30 +1193,98 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {view === 'metrics' && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+             <div className={`${bgCard} p-8 rounded-[3rem] border ${borderCard} shadow-sm`}>
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="p-2 bg-indigo-600/10 text-indigo-500 rounded-xl"><TrendingUp size={24} /></div>
+                  <h3 className="text-xl font-black tracking-tight">Investimento de Foco (Projetos Ativos)</h3>
+                </div>
+                <div className="space-y-6">
+                  {activeChartData.length > 0 ? activeChartData.map((item, idx) => (
+                    <div key={idx} className="space-y-2">
+                      <div className="flex justify-between items-end">
+                        <span className="text-xs font-black truncate max-w-[70%]">{item.title}</span>
+                        <span className="text-[10px] font-bold text-indigo-500 tabular-nums">{formatTimeSpent(item.time)}</span>
+                      </div>
+                      <div className={`w-full h-4 rounded-full p-0.5 border ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`}>
+                        <div 
+                          className="h-full bg-indigo-600 rounded-full transition-all duration-500 ease-out shadow-sm"
+                          style={{ width: `${Math.max(item.percentage, 2)}%` }} 
+                        />
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="text-center py-20 opacity-40">
+                      <Briefcase size={40} className="mx-auto mb-4" />
+                      <p className="text-xs font-black uppercase tracking-widest">Nenhum projeto ativo com tempo registrado ainda.</p>
+                    </div>
+                  )}
+                </div>
+             </div>
+          </div>
+        )}
+
         {view === 'history' && (
           <div className="space-y-6 animate-in fade-in duration-500">
             {completedTasks.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {completedTasks.map(task => (
-                  <div key={task.id} onClick={() => handleReactivateTask(task.id)} className={`${bgCard} p-8 rounded-[3rem] border ${borderCard} shadow-sm flex flex-col justify-between group relative cursor-pointer hover:border-indigo-500 transition-all`}>
-                    <button onClick={(e) => { e.stopPropagation(); handleDeleteHistoryTask(task.id); }} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
-                    <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full flex items-center gap-1"><CheckCircle2 size={10} /> Concluído</span>
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>{task.completedAt ? new Date(task.completedAt).toLocaleDateString('pt-BR') : '-'}</span>
-                      </div>
-                      <h3 className="text-xl font-black mb-3 pr-8">{task.title}</h3>
-                      <div className={`flex items-center gap-4 ${textMuted}`}>
-                        <div className="flex items-center gap-1 text-[11px] font-bold"><Clock size={14} className="text-indigo-500" /><span>Tempo Focado: {formatTimeSpent(task.totalTimeSpent)}</span></div>
-                      </div>
+              <>
+                {/* Janela de Gráfico Comparativo */}
+                <div className={`${bgCard} p-8 rounded-[3rem] border ${borderCard} shadow-sm mb-10`}>
+                  <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-indigo-600/10 text-indigo-500 rounded-xl"><TrendingUp size={24} /></div>
+                      <h3 className="text-xl font-black tracking-tight">Investimento de Foco (Últimos 10 Concluídos)</h3>
                     </div>
-                    <div className={`mt-6 pt-6 border-t ${borderCard} flex items-center justify-between`}>
-                       <span className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>Recompensa Ganha:</span>
-                       <div className="flex items-center gap-1 text-indigo-500 font-black"><Zap size={14} fill="currentColor" /> +{task.rewardPoints} pts</div>
-                    </div>
+                    {chartData.length > 10 && (
+                      <button 
+                        onClick={() => setActiveModal('history-all')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${theme === 'light' ? 'bg-slate-100 text-indigo-600 hover:bg-indigo-600 hover:text-white' : 'bg-slate-800 text-indigo-400 hover:bg-indigo-600 hover:text-white'}`}
+                      >
+                        <Maximize2 size={14} /> Ver Todos
+                      </button>
+                    )}
                   </div>
-                ))}
-              </div>
+                  <div className="space-y-6">
+                    {chartData.slice(0, 10).map((item, idx) => (
+                      <div key={idx} className="space-y-2">
+                        <div className="flex justify-between items-end">
+                          <span className="text-xs font-black truncate max-w-[70%]">{item.title}</span>
+                          <span className="text-[10px] font-bold text-indigo-500 tabular-nums">{formatTimeSpent(item.time)}</span>
+                        </div>
+                        <div className={`w-full h-4 rounded-full p-0.5 border ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`}>
+                          <div 
+                            className="h-full bg-indigo-600 rounded-full transition-all duration-1000 ease-out shadow-sm"
+                            style={{ width: `${Math.max(item.percentage, 2)}%` }} 
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {completedTasks.map(task => (
+                    <div key={task.id} onClick={() => handleReactivateTask(task.id)} className={`${bgCard} p-8 rounded-[3rem] border ${borderCard} shadow-sm flex flex-col justify-between group relative cursor-pointer hover:border-indigo-500 transition-all`}>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteHistoryTask(task.id); }} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
+                      <div>
+                        <div className="flex items-center justify-between mb-4">
+                          <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full flex items-center gap-1"><CheckCircle2 size={10} /> Concluído</span>
+                          <span className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>{task.completedAt ? new Date(task.completedAt).toLocaleDateString('pt-BR') : '-'}</span>
+                        </div>
+                        <h3 className="text-xl font-black mb-3 pr-8">{task.title}</h3>
+                        <div className={`flex items-center gap-4 ${textMuted}`}>
+                          <div className="flex items-center gap-1 text-[11px] font-bold"><Clock size={14} className="text-indigo-500" /><span>Tempo Focado: {formatTimeSpent(task.totalTimeSpent)}</span></div>
+                        </div>
+                      </div>
+                      <div className={`mt-6 pt-6 border-t ${borderCard} flex items-center justify-between`}>
+                         <span className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>Recompensa Ganha:</span>
+                         <div className="flex items-center gap-1 text-indigo-500 font-black"><Zap size={14} fill="currentColor" /> +{task.rewardPoints} pts</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             ) : (
               <div className={`text-center py-32 ${bgCard} rounded-[3rem] border-2 border-dashed ${borderMain}`}>
                 <History size={54} className="text-slate-200 mx-auto mb-6" />
@@ -1228,7 +1321,7 @@ const App: React.FC = () => {
            <div className={`relative p-12 rounded-[4rem] text-center shadow-2xl animate-in zoom-in-95 duration-500 flex flex-col items-center border ${theme === 'light' ? 'bg-white border-white' : 'bg-slate-900 border-slate-800'}`}>
               <div className="w-24 h-24 bg-amber-400 rounded-full flex items-center justify-center mb-6 shadow-xl animate-bounce"><Star size={48} className="text-white" fill="currentColor" /></div>
               <h2 className="text-4xl font-black tracking-tighter mb-2">OBJETIVO ALCANÇADO!</h2>
-              <div className="bg-indigo-600 text-white px-8 py-4 rounded-3xl flex items-center gap-3 shadow-lg shadow-indigo-900/30">
+              <div className="bg-indigo-700 text-white px-8 py-4 rounded-3xl flex items-center gap-3 shadow-lg shadow-indigo-900/30">
                  <Zap size={32} fill="currentColor" />
                  <div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest opacity-70">Recompensa Extra</span><div className="text-2xl font-black leading-none">+{showCelebration.points} PONTOS</div></div>
               </div>
@@ -1480,7 +1573,7 @@ const App: React.FC = () => {
              </div>
              <input autoFocus value={newReward.title} onChange={e => setNewReward({...newReward, title: e.target.value})} placeholder="Nome do Prêmio" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-purple-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
              <input type="number" value={newReward.cost} onChange={e => setNewReward({...newReward, cost: parseInt(e.target.value) || 0})} className={`w-full p-4 border-2 rounded-2xl font-black text-center text-2xl text-purple-500 outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`} />
-             <button onClick={handleCreateReward} disabled={!newReward.title.trim()} className="w-full bg-purple-600 text-white font-black py-5 rounded-2xl shadow-xl transition-all">Criar Prêmio</button>
+             <button onClick={handleCreateReward} disabled={!newReward.title.trim()} className="w-full bg-purple-600 text-white font-black py-4 rounded-2xl shadow-xl transition-all">Criar Prêmio</button>
           </div>
         </Modal>
       )}
@@ -1535,6 +1628,35 @@ const App: React.FC = () => {
           </div>
         </Modal>
       )}
+
+      {activeModal === 'history-all' && (
+        <Modal title="Relatório Completo de Foco" onClose={() => setActiveModal(null)} theme={theme}>
+          <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+             <div className="space-y-6">
+                {chartData.map((item, idx) => (
+                  <div key={idx} className="space-y-2">
+                    <div className="flex justify-between items-end">
+                      <span className="text-xs font-black truncate max-w-[70%]">{item.title}</span>
+                      <span className="text-[10px] font-bold text-indigo-500 tabular-nums">{formatTimeSpent(item.time)}</span>
+                    </div>
+                    <div className={`w-full h-3 rounded-full p-0.5 border ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`}>
+                      <div 
+                        className="h-full bg-indigo-600 rounded-full transition-all duration-300"
+                        style={{ width: `${Math.max(item.percentage, 2)}%` }} 
+                      />
+                    </div>
+                  </div>
+                ))}
+             </div>
+             <button 
+                onClick={() => setActiveModal(null)} 
+                className="w-full mt-4 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg"
+              >
+                Fechar Relatório
+              </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
@@ -1550,7 +1672,7 @@ const NavItem = ({ active, onClick, icon, label, theme }: any) => {
   );
 };
 
-const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, theme }: any) => {
+const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, theme, formatTimeSpent }: any) => {
   const completed = task.subTasks.filter((s:any) => s.completed).length;
   const total = task.subTasks.length;
   const pct = total > 0 ? (completed / total) * 100 : 0;
@@ -1564,6 +1686,15 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, the
       <div>
         <div className="mb-4 flex flex-wrap gap-2">
           <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${isLight ? 'bg-slate-50 text-slate-400' : 'bg-slate-800 text-slate-500'}`}>Projeto</span>
+          
+          {/* Tag de Tempo de Foco */}
+          {task.totalTimeSpent > 0 && (
+            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg flex items-center gap-1 ${isLight ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-900/30 text-indigo-400'}`}>
+              <Timer size={10} /> {formatTimeSpent(task.totalTimeSpent)}
+            </span>
+          )}
+
+          {/* Tag de Prazo */}
           {task.dueDate && (
             <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg flex items-center gap-1 ${isOverdue(task.dueDate) ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
               <Calendar size={10} /> {formatDate(task.dueDate)}
