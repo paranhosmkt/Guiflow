@@ -805,6 +805,10 @@ const App: React.FC = () => {
     }));
   }, [completedTasks]);
 
+  const totalHistoryTime = useMemo(() => {
+    return completedTasks.reduce((acc, t) => acc + (t.totalTimeSpent || 0), 0);
+  }, [completedTasks]);
+
   // Filtro de métricas avançado
   const filteredMetrics = useMemo(() => {
     const combinedTasks = [...tasks, ...completedTasks];
@@ -1367,7 +1371,7 @@ const App: React.FC = () => {
                   <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-indigo-600/10 text-indigo-500 rounded-xl"><TrendingUp size={24} /></div>
-                      <h3 className="text-xl font-black tracking-tight">Investimento de Foco (Últimos 10 Concluídos)</h3>
+                      <h3 className="text-xl font-black tracking-tight">Investimento de Foco Histórico</h3>
                     </div>
                     {chartData.length > 10 && (
                       <button 
@@ -1378,6 +1382,30 @@ const App: React.FC = () => {
                       </button>
                     )}
                   </div>
+
+                  {/* Resumo de Histórico */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
+                    <div className={`p-6 rounded-[2rem] border transition-all ${theme === 'light' ? 'bg-slate-50 border-slate-100 hover:border-indigo-100' : 'bg-slate-800/50 border-slate-700 hover:border-indigo-500/30'}`}>
+                       <div className="flex items-center gap-2 mb-2">
+                         <Clock size={14} className="text-indigo-500" />
+                         <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Tempo Total Investido</span>
+                       </div>
+                       <div className="text-3xl font-black text-indigo-500 tabular-nums">
+                         {formatTimeSpent(totalHistoryTime)}
+                       </div>
+                    </div>
+                    <div className={`p-6 rounded-[2rem] border transition-all ${theme === 'light' ? 'bg-slate-50 border-slate-100 hover:border-emerald-100' : 'bg-slate-800/50 border-slate-700 hover:border-emerald-500/30'}`}>
+                       <div className="flex items-center gap-2 mb-2">
+                         <CheckCircle2 size={14} className="text-emerald-500" />
+                         <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Objetivos Concluídos</span>
+                       </div>
+                       <div className="text-3xl font-black text-emerald-500 tabular-nums">
+                         {completedTasks.length} <span className="text-xs font-bold opacity-40 uppercase ml-1">Macros</span>
+                       </div>
+                    </div>
+                  </div>
+
+                  <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 px-1 mb-6">Foco por Projeto (Recentes)</h4>
                   <div className="space-y-6">
                     {chartData.slice(0, 10).map((item, idx) => (
                       <div key={idx} className="space-y-2">
@@ -1957,7 +1985,7 @@ const Modal = ({ title, onClose, children, theme }: any) => {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 duration-200 border overflow-y-auto max-h-[90vh] ${isLight ? 'bg-white border-slate-100' : 'bg-slate-900 border-slate-800'}`}>
+      <div className={`relative w-full max-sm:max-w-none max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 duration-200 border overflow-y-auto max-h-[90vh] ${isLight ? 'bg-white border-slate-100' : 'bg-slate-900 border-slate-800'}`}>
         <button onClick={onClose} className={`absolute right-8 top-8 transition-colors ${isLight ? 'text-slate-300 hover:text-slate-600' : 'text-slate-600 hover:text-slate-300'}`}><X size={28} /></button>
         <h3 className={`text-2xl font-black mb-8 tracking-tighter ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>{title}</h3>
         {children}
