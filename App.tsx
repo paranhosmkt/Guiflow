@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   LayoutDashboard, 
@@ -49,7 +50,8 @@ import {
   ShoppingBag,
   TrendingUp,
   Maximize2,
-  ChevronDown
+  ChevronDown,
+  Copy
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink, MonthlyGoal, RedeemedReward } from './types';
@@ -219,7 +221,7 @@ const App: React.FC = () => {
   const lastTickRef = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | 'settings' | 'history-all' | null>(null);
+  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | 'settings' | 'history-all' | 'duplicate-task' | null>(null);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
@@ -231,6 +233,7 @@ const App: React.FC = () => {
 
   const [editingMacro, setEditingMacro] = useState<Task | null>(null);
   const [editingSubTask, setEditingSubTask] = useState<{taskId: string, subTask: SubTask} | null>(null);
+  const [taskToDuplicate, setTaskToDuplicate] = useState<{taskId: string, subTask: SubTask} | null>(null);
   
   const [undoToast, setUndoToast] = useState<{ message: string; onUndo: () => void } | null>(null);
 
@@ -517,6 +520,37 @@ const App: React.FC = () => {
     if (e) e.stopPropagation();
     setEditingSubTask({ taskId, subTask: { ...subTask } });
     setActiveModal('edit-task');
+  };
+
+  const handleOpenDuplicateSubTask = (taskId: string, subTask: SubTask, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setTaskToDuplicate({ taskId, subTask: { ...subTask } });
+    setActiveModal('duplicate-task');
+  };
+
+  const handleConfirmDuplicate = (targetTaskId: string) => {
+    if (!taskToDuplicate) return;
+
+    const newSubTask: SubTask = {
+      ...taskToDuplicate.subTask,
+      id: Math.random().toString(36).substr(2, 9),
+      completed: false,
+      status: 'todo',
+      archived: false
+    };
+
+    setTasks(prev => prev.map(t => t.id === targetTaskId ? { ...t, subTasks: [...t.subTasks, newSubTask] } : t));
+    setTaskToDuplicate(null);
+    setActiveModal(null);
+    
+    const targetProject = tasks.find(t => t.id === targetTaskId);
+    setUndoToast({
+      message: `Tarefa duplicada para "${targetProject?.title}"`,
+      onUndo: () => {
+        setTasks(prev => prev.map(t => t.id === targetTaskId ? { ...t, subTasks: t.subTasks.filter(st => st.id !== newSubTask.id) } : t));
+      }
+    });
+    setTimeout(() => setUndoToast(null), 5000);
   };
 
   const handleUpdateSubTask = () => {
@@ -1129,6 +1163,7 @@ const App: React.FC = () => {
                     onDragOver={(e: React.DragEvent) => e.preventDefault()} 
                     onDragStart={setDraggedSubTaskId} 
                     onEditSubTask={(st: SubTask, e: any) => handleOpenEditSubTask(activeTask.id, st, e)} 
+                    onDuplicateSubTask={(st: SubTask, e: any) => handleOpenDuplicateSubTask(activeTask.id, st, e)}
                     onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} 
                     formatDate={formatDate} 
                     isOverdue={isOverdue} 
@@ -1141,6 +1176,7 @@ const App: React.FC = () => {
                     onDragOver={(e: React.DragEvent) => e.preventDefault()} 
                     onDragStart={setDraggedSubTaskId} 
                     onEditSubTask={(st: SubTask, e: any) => handleOpenEditSubTask(activeTask.id, st, e)} 
+                    onDuplicateSubTask={(st: SubTask, e: any) => handleOpenDuplicateSubTask(activeTask.id, st, e)}
                     onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} 
                     formatDate={formatDate} 
                     isOverdue={isOverdue} 
@@ -1154,6 +1190,7 @@ const App: React.FC = () => {
                     onDragOver={(e: React.DragEvent) => e.preventDefault()} 
                     onDragStart={setDraggedSubTaskId} 
                     onEditSubTask={(st: SubTask, e: any) => handleOpenEditSubTask(activeTask.id, st, e)} 
+                    onDuplicateSubTask={(st: SubTask, e: any) => handleOpenDuplicateSubTask(activeTask.id, st, e)}
                     onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} 
                     formatDate={formatDate} 
                     isOverdue={isOverdue} 
@@ -1643,6 +1680,42 @@ const App: React.FC = () => {
         </Modal>
       )}
 
+      {activeModal === 'duplicate-task' && taskToDuplicate && (
+        <Modal title="Duplicar para outro Objetivo" onClose={() => { setActiveModal(null); setTaskToDuplicate(null); }} theme={theme}>
+          <div className="space-y-4">
+            <p className={`text-xs italic mb-6 ${textMuted}`}>Selecione o destino desta micro-tarefa:</p>
+            <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+              {tasks.filter(t => !t.completed && t.id !== taskToDuplicate.taskId).length > 0 ? (
+                tasks.filter(t => !t.completed && t.id !== taskToDuplicate.taskId).map(target => (
+                  <button 
+                    key={target.id}
+                    onClick={() => handleConfirmDuplicate(target.id)}
+                    className={`w-full p-5 rounded-[2rem] border-2 text-left transition-all flex items-center justify-between group ${theme === 'light' ? 'bg-slate-50 border-slate-100 hover:border-indigo-600 hover:bg-indigo-50/30' : 'bg-slate-800 border-slate-700 hover:border-indigo-500 hover:bg-indigo-950/20'}`}
+                  >
+                    <div className="flex-1 min-w-0 pr-4">
+                      <span className="block font-black text-sm truncate">{target.title}</span>
+                      <span className={`text-[10px] font-black uppercase tracking-widest opacity-40`}>{target.subTasks.length} sub-tarefas</span>
+                    </div>
+                    <ChevronRight size={18} className="text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                  </button>
+                ))
+              ) : (
+                <div className="text-center py-12 opacity-40">
+                  <AlertCircle size={40} className="mx-auto mb-4" />
+                  <p className="text-xs font-black uppercase tracking-widest">Nenhum outro objetivo ativo encontrado.</p>
+                </div>
+              )}
+            </div>
+            <button 
+              onClick={() => { setActiveModal(null); setTaskToDuplicate(null); }} 
+              className="w-full mt-4 py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 font-black rounded-2xl transition-all"
+            >
+              Cancelar
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {activeModal === 'link' && (
         <Modal title="Anexar Link de Referência" onClose={() => setActiveModal(null)} theme={theme}>
           <div className="space-y-6">
@@ -1812,7 +1885,7 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, the
   );
 };
 
-const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTask, onDeleteSubTask, formatDate, isOverdue, highlight, theme, onArchive }: any) => {
+const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTask, onDuplicateSubTask, onDeleteSubTask, formatDate, isOverdue, highlight, theme, onArchive }: any) => {
   const isLight = theme === 'light';
   return (
     <div className={`flex flex-col h-full rounded-[3rem] p-5 border-2 border-dashed ${highlight ? (isLight ? 'bg-indigo-50/20 border-indigo-100' : 'bg-indigo-950/10 border-indigo-900/30') : (isLight ? 'bg-slate-50/50 border-slate-200' : 'bg-slate-900/20 border-slate-800/50')}`} onDrop={onDrop} onDragOver={onDragOver}>
@@ -1834,6 +1907,7 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTas
         {tasks.map((t: any) => (
           <div key={t.id} draggable onDragStart={() => onDragStart(t.id)} onClick={() => onEditSubTask(t)} className={`p-5 rounded-3xl shadow-sm border cursor-pointer hover:shadow-lg transition-all group relative ${t.completed ? 'opacity-50' : ''} ${isLight ? 'bg-white border-slate-100 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-200'}`}>
             <div className="absolute top-2 right-2 flex items-center opacity-0 group-hover:opacity-100 transition-opacity z-10">
+              <button onClick={(e) => onDuplicateSubTask(t, e)} title="Duplicar para outro objetivo" className="p-1.5 text-slate-400 hover:text-indigo-500 transition-colors"><Copy size={12} /></button>
               <button onClick={(e) => onEditSubTask(t, e)} className="p-1.5 text-slate-400 hover:text-indigo-500 transition-colors"><Pencil size={12} /></button>
               <button onClick={(e) => { e.stopPropagation(); onDeleteSubTask(t.id); }} className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={12} /></button>
             </div>
