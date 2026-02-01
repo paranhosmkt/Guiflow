@@ -221,7 +221,7 @@ const App: React.FC = () => {
   const lastTickRef = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | 'settings' | 'history-all' | 'duplicate-task' | null>(null);
+  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | 'settings' | 'duplicate-task' | null>(null);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
@@ -795,40 +795,29 @@ const App: React.FC = () => {
   const borderMain = theme === 'light' ? 'border-slate-200' : 'border-slate-800';
   const borderCard = theme === 'light' ? 'border-slate-100' : 'border-slate-800';
 
-  const chartData = useMemo(() => {
-    if (completedTasks.length === 0) return [];
-    const maxTime = Math.max(...completedTasks.map(t => t.totalTimeSpent || 0), 1);
-    return completedTasks.map(t => ({
-      title: t.title,
-      time: t.totalTimeSpent || 0,
-      percentage: ((t.totalTimeSpent || 0) / maxTime) * 100
-    }));
-  }, [completedTasks]);
-
-  const totalHistoryTime = useMemo(() => {
-    return completedTasks.reduce((acc, t) => acc + (t.totalTimeSpent || 0), 0);
-  }, [completedTasks]);
-
-  // Filtro de métricas avançado
+  // Filtro de métricas avançado: Garantindo que o que foi feito no mês X apareça no mês X
   const filteredMetrics = useMemo(() => {
     const combinedTasks = [...tasks, ...completedTasks];
     const filtered = combinedTasks.filter(t => {
-      const dateToCheck = t.completedAt || t.dueDate;
+      const dateToCheck = t.completed ? t.completedAt : t.dueDate;
       if (!dateToCheck) return false;
       return dateToCheck.startsWith(selectedMonth);
     });
     
-    if (filtered.length === 0) return { tasks: [], totalMinutes: 0 };
+    if (filtered.length === 0) return { tasks: [], totalMinutes: 0, completedCount: 0 };
     
+    const completedCount = filtered.filter(t => t.completed).length;
     const totalMinutes = filtered.reduce((acc, t) => acc + (t.totalTimeSpent || 0), 0);
     const maxTime = Math.max(...filtered.map(t => t.totalTimeSpent || 0), 1);
     
     return {
       totalMinutes,
+      completedCount,
       tasks: filtered.map(t => ({
         title: t.title,
         time: t.totalTimeSpent || 0,
-        percentage: ((t.totalTimeSpent || 0) / maxTime) * 100
+        percentage: ((t.totalTimeSpent || 0) / maxTime) * 100,
+        completed: t.completed
       }))
     };
   }, [tasks, completedTasks, selectedMonth]);
@@ -837,7 +826,6 @@ const App: React.FC = () => {
     const combined = [...tasks, ...completedTasks];
     const months = new Set<string>();
     
-    // Garantir que o mês atual esteja sempre na lista
     const now = new Date();
     months.add(`${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`);
     
@@ -856,17 +844,6 @@ const App: React.FC = () => {
     const date = new Date(parseInt(year), parseInt(month) - 1);
     return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   };
-
-  const activeChartData = useMemo(() => {
-    const activeTasks = tasks.filter(t => !t.completed);
-    if (activeTasks.length === 0) return [];
-    const maxTime = Math.max(...activeTasks.map(t => t.totalTimeSpent || 0), 1);
-    return activeTasks.map(t => ({
-      title: t.title,
-      time: t.totalTimeSpent || 0,
-      percentage: ((t.totalTimeSpent || 0) / maxTime) * 100
-    }));
-  }, [tasks]);
 
   return (
     <div className={`min-h-screen pb-20 md:pb-0 md:pl-64 flex flex-col transition-colors duration-300 ${bgMain} ${textMain}`}>
@@ -1039,11 +1016,10 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Timer Modificado */}
+                  {/* Timer */}
                   <div className="xl:col-span-1 flex flex-col gap-4">
                     <div className={`p-6 md:p-8 rounded-[3rem] border-2 shadow-sm flex flex-col items-center justify-center transition-all relative overflow-hidden ${timerFlash ? 'animate-pulse scale-105' : ''} ${timerMode === 'work' ? (theme === 'light' ? 'bg-rose-50 border-rose-100' : 'bg-rose-950/20 border-rose-900/50') : (theme === 'light' ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-950/20 border-emerald-900/50')}`}>
                       
-                      {/* Configurações Rápidas do Timer */}
                       <button 
                         onClick={() => setShowTimerSettings(!showTimerSettings)}
                         className={`absolute top-6 right-6 p-2 rounded-xl transition-all ${theme === 'light' ? 'bg-white/60 text-slate-400 hover:text-indigo-600' : 'bg-black/20 text-slate-500 hover:text-indigo-400'}`}
@@ -1058,7 +1034,6 @@ const App: React.FC = () => {
                          </span>
                       </div>
 
-                      {/* Visualização de Ciclos */}
                       <div className="flex gap-1 mb-2">
                         {Array.from({ length: cyclesUntilLongBreak }).map((_, i) => (
                           <div 
@@ -1077,7 +1052,6 @@ const App: React.FC = () => {
 
                       <div className="text-5xl font-black tabular-nums tracking-tighter mb-4">{Math.floor(timerSeconds / 60).toString().padStart(2, '0')}:{(timerSeconds % 60).toString().padStart(2, '0')}</div>
                       
-                      {/* Painel de Configurações Inline */}
                       {showTimerSettings && (
                         <div className={`w-full mb-6 p-4 rounded-2xl border animate-in slide-in-from-top-2 duration-200 ${theme === 'light' ? 'bg-white border-slate-100' : 'bg-slate-900 border-slate-800'}`}>
                           <div className="grid grid-cols-2 gap-3">
@@ -1138,15 +1112,9 @@ const App: React.FC = () => {
                            className={`flex-1 py-4 rounded-2xl flex items-center justify-center gap-2 text-white font-black shadow-lg transition-all hover:scale-[1.02] active:scale-95 ${timerMode === 'work' ? 'bg-rose-600 shadow-rose-900/20' : 'bg-emerald-600 shadow-emerald-900/20'}`}
                          >
                            {isTimerActive ? (
-                             <>
-                               <Pause size={20} fill="currentColor" />
-                               <span className="text-xs uppercase tracking-widest">Pausar</span>
-                             </>
+                             <><Pause size={20} fill="currentColor" /><span className="text-xs uppercase tracking-widest">Pausar</span></>
                            ) : (
-                             <>
-                               <Play size={20} fill="currentColor" />
-                               <span className="text-xs uppercase tracking-widest">Continuar</span>
-                             </>
+                             <><Play size={20} fill="currentColor" /><span className="text-xs uppercase tracking-widest">Continuar</span></>
                            )}
                          </button>
                          <button onClick={handleResetTimer} className={`w-14 h-14 rounded-2xl border flex items-center justify-center transition-all shadow-sm ${theme === 'light' ? 'bg-white border-slate-200 text-slate-400 hover:text-slate-600' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}><RotateCcw size={20} /></button>
@@ -1221,7 +1189,6 @@ const App: React.FC = () => {
                <div className="w-24 h-24 bg-indigo-600 rounded-3xl flex items-center justify-center rotate-6 shadow-xl"><Trophy size={48} /></div>
             </div>
 
-            {/* Vitrine de Recompensas */}
             <div className="space-y-6">
               <div className="flex items-center gap-3">
                  <div className="p-2 bg-indigo-600/10 text-indigo-500 rounded-xl"><Gift size={24} /></div>
@@ -1250,7 +1217,6 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Histórico de Resgates */}
             <div className="space-y-6 pt-10 border-t border-slate-200 dark:border-slate-800">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -1295,7 +1261,7 @@ const App: React.FC = () => {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-indigo-600/10 text-indigo-500 rounded-xl"><TrendingUp size={24} /></div>
-                    <h3 className="text-xl font-black tracking-tight">Análise de Desempenho</h3>
+                    <h3 className="text-xl font-black tracking-tight">Análise Mensal de Desempenho</h3>
                   </div>
                   
                   <div className="flex items-center gap-3">
@@ -1319,7 +1285,7 @@ const App: React.FC = () => {
                    <div className={`p-8 rounded-[2.5rem] border ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-indigo-950/20 border-indigo-900/40'}`}>
                       <div className="flex items-center gap-2 mb-2">
                         <Clock size={16} className="text-indigo-500" />
-                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Total de Foco no Mês</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Foco Acumulado no Mês</span>
                       </div>
                       <div className="text-4xl font-black text-indigo-500 tabular-nums">
                         {formatTimeSpent(filteredMetrics.totalMinutes)}
@@ -1328,25 +1294,28 @@ const App: React.FC = () => {
                    <div className={`p-8 rounded-[2.5rem] border ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-emerald-950/20 border-emerald-900/40'}`}>
                       <div className="flex items-center gap-2 mb-2">
                         <Target size={16} className="text-emerald-500" />
-                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Objetivos Movimentados</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Objetivos Concluídos no Mês</span>
                       </div>
                       <div className="text-4xl font-black text-emerald-500 tabular-nums">
-                        {filteredMetrics.tasks.length}
+                        {filteredMetrics.completedCount}
                       </div>
                    </div>
                 </div>
 
                 <div className="space-y-6">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 px-1">Distribuição por Projeto</h4>
+                  <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 px-1">Distribuição de Foco</h4>
                   {filteredMetrics.tasks.length > 0 ? filteredMetrics.tasks.map((item, idx) => (
                     <div key={idx} className="space-y-2">
                       <div className="flex justify-between items-end">
-                        <span className="text-xs font-black truncate max-w-[70%]">{item.title}</span>
+                        <div className="flex items-center gap-2 max-w-[70%]">
+                           {item.completed ? <CheckCircle2 size={12} className="text-emerald-500 shrink-0" /> : <Clock size={12} className="text-indigo-400 shrink-0" />}
+                           <span className="text-xs font-black truncate">{item.title}</span>
+                        </div>
                         <span className="text-[10px] font-bold text-indigo-500 tabular-nums">{formatTimeSpent(item.time)}</span>
                       </div>
                       <div className={`w-full h-4 rounded-full p-0.5 border ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`}>
                         <div 
-                          className="h-full bg-indigo-600 rounded-full transition-all duration-500 ease-out shadow-sm"
+                          className={`h-full rounded-full transition-all duration-500 ease-out shadow-sm ${item.completed ? 'bg-emerald-500' : 'bg-indigo-600'}`}
                           style={{ width: `${Math.max(item.percentage, 2)}%` }} 
                         />
                       </div>
@@ -1354,7 +1323,7 @@ const App: React.FC = () => {
                   )) : (
                     <div className="text-center py-20 opacity-40">
                       <Briefcase size={40} className="mx-auto mb-4" />
-                      <p className="text-xs font-black uppercase tracking-widest">Nenhum registro encontrado para este mês.</p>
+                      <p className="text-xs font-black uppercase tracking-widest">Sem atividades registradas para este mês.</p>
                     </div>
                   )}
                 </div>
@@ -1364,68 +1333,21 @@ const App: React.FC = () => {
 
         {view === 'history' && (
           <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="flex items-center justify-between mb-8">
+               <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-600/10 text-indigo-500 rounded-xl"><CheckCircle2 size={24} /></div>
+                  <h3 className="text-xl font-black tracking-tight">Galeria de Objetivos Concluídos</h3>
+               </div>
+            </div>
+
             {completedTasks.length > 0 ? (
-              <>
-                {/* Janela de Gráfico Comparativo */}
-                <div className={`${bgCard} p-8 rounded-[3rem] border ${borderCard} shadow-sm mb-10`}>
-                  <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-indigo-600/10 text-indigo-500 rounded-xl"><TrendingUp size={24} /></div>
-                      <h3 className="text-xl font-black tracking-tight">Investimento de Foco Histórico</h3>
-                    </div>
-                    {chartData.length > 10 && (
-                      <button 
-                        onClick={() => setActiveModal('history-all')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${theme === 'light' ? 'bg-slate-100 text-indigo-600 hover:bg-indigo-600 hover:text-white' : 'bg-slate-800 text-indigo-400 hover:bg-indigo-600 hover:text-white'}`}
-                      >
-                        <Maximize2 size={14} /> Ver Todos
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Resumo de Histórico */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
-                    <div className={`p-6 rounded-[2rem] border transition-all ${theme === 'light' ? 'bg-slate-50 border-slate-100 hover:border-indigo-100' : 'bg-slate-800/50 border-slate-700 hover:border-indigo-500/30'}`}>
-                       <div className="flex items-center gap-2 mb-2">
-                         <Clock size={14} className="text-indigo-500" />
-                         <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Tempo Total Investido</span>
-                       </div>
-                       <div className="text-3xl font-black text-indigo-500 tabular-nums">
-                         {formatTimeSpent(totalHistoryTime)}
-                       </div>
-                    </div>
-                    <div className={`p-6 rounded-[2rem] border transition-all ${theme === 'light' ? 'bg-slate-50 border-slate-100 hover:border-emerald-100' : 'bg-slate-800/50 border-slate-700 hover:border-emerald-500/30'}`}>
-                       <div className="flex items-center gap-2 mb-2">
-                         <CheckCircle2 size={14} className="text-emerald-500" />
-                         <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Objetivos Concluídos</span>
-                       </div>
-                       <div className="text-3xl font-black text-emerald-500 tabular-nums">
-                         {completedTasks.length} <span className="text-xs font-bold opacity-40 uppercase ml-1">Macros</span>
-                       </div>
-                    </div>
-                  </div>
-
-                  <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 px-1 mb-6">Foco por Projeto (Recentes)</h4>
-                  <div className="space-y-6">
-                    {chartData.slice(0, 10).map((item, idx) => (
-                      <div key={idx} className="space-y-2">
-                        <div className="flex justify-between items-end">
-                          <span className="text-xs font-black truncate max-w-[70%]">{item.title}</span>
-                          <span className="text-[10px] font-bold text-indigo-500 tabular-nums">{formatTimeSpent(item.time)}</span>
-                        </div>
-                        <div className={`w-full h-4 rounded-full p-0.5 border ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`}>
-                          <div 
-                            className="h-full bg-indigo-600 rounded-full transition-all duration-1000 ease-out shadow-sm"
-                            style={{ width: `${Math.max(item.percentage, 2)}%` }} 
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {completedTasks.map(task => (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {completedTasks.map(task => {
+                  // Calcular total de pontos: bônus macro + pontos de todas as microtarefas
+                  const totalEarnedPoints = (task.rewardPoints || 0) + 
+                    (task.subTasks || []).reduce((acc, st) => acc + (st.rewardPoints || 0), 0);
+                  
+                  return (
                     <div key={task.id} onClick={() => handleReactivateTask(task.id)} className={`${bgCard} p-8 rounded-[3rem] border ${borderCard} shadow-sm flex flex-col justify-between group relative cursor-pointer hover:border-indigo-500 transition-all`}>
                       <button onClick={(e) => { e.stopPropagation(); handleDeleteHistoryTask(task.id); }} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
                       <div>
@@ -1439,17 +1361,20 @@ const App: React.FC = () => {
                         </div>
                       </div>
                       <div className={`mt-6 pt-6 border-t ${borderCard} flex items-center justify-between`}>
-                         <span className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>Recompensa Ganha:</span>
-                         <div className="flex items-center gap-1 text-indigo-500 font-black"><Zap size={14} fill="currentColor" /> +{task.rewardPoints} pts</div>
+                         <div className="flex flex-col">
+                           <span className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>Recompensa Ganha:</span>
+                           <span className="text-[8px] font-medium opacity-40 uppercase tracking-tighter">(Objetivo + Micro-tarefas)</span>
+                         </div>
+                         <div className="flex items-center gap-1 text-indigo-500 font-black"><Zap size={14} fill="currentColor" /> +{totalEarnedPoints} pts</div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </>
+                  );
+                })}
+              </div>
             ) : (
               <div className={`text-center py-32 ${bgCard} rounded-[3rem] border-2 border-dashed ${borderMain}`}>
                 <History size={54} className="text-slate-200 mx-auto mb-6" />
-                <button onClick={() => setView('global')} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black">Ver Objetivos</button>
+                <button onClick={() => setView('global')} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black">Começar uma Jornada</button>
               </div>
             )}
           </div>
@@ -1629,13 +1554,12 @@ const App: React.FC = () => {
         </Modal>
       )}
 
-      {/* Edit Modals */}
       {activeModal === 'edit-macro' && editingMacro && (
         <Modal title="Editar Objetivo" onClose={() => { setActiveModal(null); setEditingMacro(null); }} theme={theme}>
           <div className="space-y-6">
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Título do Objetivo</label>
-              <input autoFocus value={editingMacro.title} onChange={e => setEditingMacro({...editingMacro, title: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold text-lg outline-none focus:border-indigo-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+              <input autoFocus value={editingMacro.title} onChange={e => setEditingMacro({...editingMacro, title: e.target.value})} className={`w-full p-4 border-2 rounded-2xl font-bold text-lg outline-none focus:border-indigo-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Contexto Rápido</label>
@@ -1748,7 +1672,7 @@ const App: React.FC = () => {
         <Modal title="Anexar Link de Referência" onClose={() => setActiveModal(null)} theme={theme}>
           <div className="space-y-6">
             <div>
-              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Nome do Link (ex: Documento de Escopo)</label>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Nome do Link</label>
               <input autoFocus value={newLink.title} onChange={e => setNewLink({...newLink, title: e.target.value})} placeholder="Ex: Referência Visual" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <div>
@@ -1780,13 +1704,10 @@ const App: React.FC = () => {
           <div className="space-y-8">
             <div className="space-y-4">
               <h4 className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>Segurança dos Dados</h4>
-              <p className="text-xs leading-relaxed opacity-70">Baixe um backup completo para restaurar seus dados em outro navegador ou após formatar seu computador.</p>
+              <p className="text-xs leading-relaxed opacity-70">Baixe um backup completo para restaurar seus dados em outro navegador.</p>
               
               <div className="grid grid-cols-1 gap-3">
-                <button 
-                  onClick={handleExportData}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-indigo-600/20 bg-indigo-600/5 hover:bg-indigo-600/10 transition-all group"
-                >
+                <button onClick={handleExportData} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-indigo-600/20 bg-indigo-600/5 hover:bg-indigo-600/10 transition-all group">
                   <div className="flex items-center gap-3">
                     <Download size={20} className="text-indigo-600" />
                     <span className="font-bold text-sm">Baixar Backup</span>
@@ -1794,63 +1715,16 @@ const App: React.FC = () => {
                   <ChevronRight size={16} className="text-slate-300 group-hover:translate-x-1 transition-transform" />
                 </button>
 
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-emerald-600/20 bg-emerald-600/5 hover:bg-emerald-600/10 transition-all group"
-                >
+                <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-emerald-600/20 bg-emerald-600/5 hover:bg-emerald-600/10 transition-all group">
                   <div className="flex items-center gap-3">
                     <Upload size={20} className="text-emerald-600" />
                     <span className="font-bold text-sm">Restaurar de Arquivo</span>
                   </div>
                   <ChevronRight size={16} className="text-slate-300 group-hover:translate-x-1 transition-transform" />
                 </button>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleImportData} 
-                  accept=".json" 
-                  className="hidden" 
-                />
+                <input type="file" ref={fileInputRef} onChange={handleImportData} accept=".json" className="hidden" />
               </div>
             </div>
-
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-              <button 
-                onClick={() => setActiveModal(null)} 
-                className="w-full py-4 bg-slate-900 dark:bg-black text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg active:scale-95 transition-all"
-              >
-                Voltar
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {activeModal === 'history-all' && (
-        <Modal title="Relatório Completo de Foco" onClose={() => setActiveModal(null)} theme={theme}>
-          <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-             <div className="space-y-6">
-                {chartData.map((item, idx) => (
-                  <div key={idx} className="space-y-2">
-                    <div className="flex justify-between items-end">
-                      <span className="text-xs font-black truncate max-w-[70%]">{item.title}</span>
-                      <span className="text-[10px] font-bold text-indigo-500 tabular-nums">{formatTimeSpent(item.time)}</span>
-                    </div>
-                    <div className={`w-full h-3 rounded-full p-0.5 border ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`}>
-                      <div 
-                        className="h-full bg-indigo-600 rounded-full transition-all duration-300"
-                        style={{ width: `${Math.max(item.percentage, 2)}%` }} 
-                      />
-                    </div>
-                  </div>
-                ))}
-             </div>
-             <button 
-                onClick={() => setActiveModal(null)} 
-                className="w-full mt-4 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg"
-              >
-                Fechar Relatório
-              </button>
           </div>
         </Modal>
       )}
@@ -1883,15 +1757,11 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, the
       <div>
         <div className="mb-4 flex flex-wrap gap-2">
           <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${isLight ? 'bg-slate-50 text-slate-400' : 'bg-slate-800 text-slate-500'}`}>Projeto</span>
-          
-          {/* Tag de Tempo de Foco */}
           {(task.totalTimeSpent || 0) > 0 && (
             <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg flex items-center gap-1 ${isLight ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-900/30 text-indigo-400'}`}>
               <Timer size={10} /> {formatTimeSpent(task.totalTimeSpent)}
             </span>
           )}
-
-          {/* Tag de Prazo */}
           {task.dueDate && (
             <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg flex items-center gap-1 ${isOverdue(task.dueDate) ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
               <Calendar size={10} /> {formatDate(task.dueDate)}
@@ -1921,12 +1791,7 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTas
          <div className="flex flex-col">
             <h4 className={`text-[10px] font-black uppercase tracking-widest ${isLight ? 'text-slate-300' : 'text-slate-600'}`}>{title}</h4>
             {title === "Concluído" && tasks.length > 0 && (
-              <button 
-                onClick={onArchive} 
-                className={`mt-1 flex items-center gap-1 text-[9px] font-bold uppercase transition-colors ${isLight ? 'text-indigo-400 hover:text-indigo-600' : 'text-indigo-500 hover:text-indigo-400'}`}
-              >
-                <Archive size={10} /> Arquivar
-              </button>
+              <button onClick={onArchive} className={`mt-1 flex items-center gap-1 text-[9px] font-bold uppercase transition-colors ${isLight ? 'text-indigo-400 hover:text-indigo-600' : 'text-indigo-500 hover:text-indigo-400'}`}><Archive size={10} /> Arquivar</button>
             )}
          </div>
          <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black border shadow-sm ${isLight ? 'bg-white text-slate-400 border-slate-100' : 'bg-slate-800 text-slate-500 border-slate-700'}`}>{tasks.length}</span>
@@ -1951,23 +1816,13 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTas
                       </div>
                     )}
                     {t.link && (
-                      <a 
-                        href={t.link.startsWith('http') ? t.link : `https://${t.link}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        onClick={(e) => e.stopPropagation()} 
-                        className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 hover:underline"
-                      >
-                        <Link2 size={10} /> Link de Referência
-                      </a>
+                      <a href={t.link.startsWith('http') ? t.link : `https://${t.link}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 hover:underline"><Link2 size={10} /> Link de Referência</a>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-3 mt-2">
                     <div className="flex items-center gap-1 text-[10px] font-black text-indigo-500 uppercase"><Zap size={10} fill="currentColor" /> +{t.rewardPoints} pts</div>
                     {t.dueDate && !t.completed && (
-                      <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${isOverdue(t.dueDate) ? 'text-rose-500' : 'text-emerald-500'}`}>
-                        <Calendar size={10} /> {formatDate(t.dueDate)}
-                      </div>
+                      <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${isOverdue(t.dueDate) ? 'text-rose-500' : 'text-emerald-500'}`}><Calendar size={10} /> {formatDate(t.dueDate)}</div>
                     )}
                   </div>
                </div>
