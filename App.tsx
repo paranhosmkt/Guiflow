@@ -51,7 +51,8 @@ import {
   TrendingUp,
   Maximize2,
   ChevronDown,
-  Copy
+  Copy,
+  CalendarDays
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink, MonthlyGoal, RedeemedReward } from './types';
@@ -125,7 +126,6 @@ const COMPLEXITY_LEVELS = [
   { id: 'complex', label: 'Complexa', points: 20, icon: <BatteryFull size={14} />, example: 'Ex: Resolver bug difícil, estudar' }
 ];
 
-// Utilitário para gerar som sem arquivos externos
 const playAlertSound = (type: 'work-end' | 'break-end') => {
   try {
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -221,7 +221,8 @@ const App: React.FC = () => {
   const lastTickRef = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | 'settings' | 'duplicate-task' | null>(null);
+  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | 'settings' | 'duplicate-task' | 'move-task' | null>(null);
+  const [taskToMove, setTaskToMove] = useState<string | null>(null);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
@@ -742,6 +743,22 @@ const App: React.FC = () => {
     reader.readAsText(file);
     // Limpar o input para permitir importar o mesmo arquivo novamente se necessário
     e.target.value = "";
+  };
+
+  const handleMoveTaskToMonth = (taskId: string, targetMonthStr: string) => {
+    const targetDate = `${targetMonthStr}-01`;
+    
+    // Check in active tasks
+    if (tasks.some(t => t.id === taskId)) {
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, dueDate: targetDate } : t));
+    } 
+    // Check in completed tasks
+    else if (completedTasks.some(t => t.id === taskId)) {
+      setCompletedTasks(prev => prev.map(t => t.id === taskId ? { ...t, completedAt: `${targetDate}T12:00:00.000Z` } : t));
+    }
+    
+    setActiveModal(null);
+    setTaskToMove(null);
   };
 
   const activeTask = useMemo(() => tasks.find(t => t.id === activeTaskId) || null, [tasks, activeTaskId]);
@@ -1303,29 +1320,30 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="space-y-6">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 px-1">Distribuição de Foco</h4>
+                  <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 px-1 mb-4">Distribuição de Foco</h4>
                   {filteredMetrics.tasks.length > 0 ? filteredMetrics.tasks.map((item, idx) => (
-                    <div key={idx} className="space-y-2">
+                    <div key={idx} className="space-y-2 group">
                       <div className="flex justify-between items-end">
                         <div className="flex items-center gap-2 max-w-[70%]">
-                           {item.completed ? <CheckCircle2 size={12} className="text-emerald-500 shrink-0" /> : <Clock size={12} className="text-indigo-400 shrink-0" />}
+                           {item.completed ? <CheckCircle2 size={12} className="text-emerald-500" /> : <Clock size={12} className="text-indigo-400" />}
                            <span className="text-xs font-black truncate">{item.title}</span>
                         </div>
-                        <span className="text-[10px] font-bold text-indigo-500 tabular-nums">{formatTimeSpent(item.time)}</span>
+                        <div className="flex items-center gap-3">
+                           <button 
+                             onClick={() => { setTaskToMove(item.id); setActiveModal('move-task'); }}
+                             className={`p-1.5 rounded-lg text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all opacity-0 group-hover:opacity-100`}
+                             title="Mover para outro mês"
+                           >
+                             <CalendarDays size={14} />
+                           </button>
+                           <span className="text-[10px] font-bold text-indigo-500">{formatTimeSpent(item.time)}</span>
+                        </div>
                       </div>
                       <div className={`w-full h-4 rounded-full p-0.5 border ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`}>
-                        <div 
-                          className={`h-full rounded-full transition-all duration-500 ease-out shadow-sm ${item.completed ? 'bg-emerald-500' : 'bg-indigo-600'}`}
-                          style={{ width: `${Math.max(item.percentage, 2)}%` }} 
-                        />
+                        <div className={`h-full rounded-full transition-all duration-500 ${item.completed ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{ width: `${Math.max(item.percentage, 2)}%` }} />
                       </div>
                     </div>
-                  )) : (
-                    <div className="text-center py-20 opacity-40">
-                      <Briefcase size={40} className="mx-auto mb-4" />
-                      <p className="text-xs font-black uppercase tracking-widest">Sem atividades registradas para este mês.</p>
-                    </div>
-                  )}
+                  )) : <div className="text-center py-20 opacity-40 uppercase font-black text-xs">Sem atividades neste mês.</div>}
                 </div>
              </div>
           </div>
@@ -1333,23 +1351,14 @@ const App: React.FC = () => {
 
         {view === 'history' && (
           <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex items-center justify-between mb-8">
-               <div className="flex items-center gap-3">
-                  <div className="p-2 bg-indigo-600/10 text-indigo-500 rounded-xl"><CheckCircle2 size={24} /></div>
-                  <h3 className="text-xl font-black tracking-tight">Galeria de Objetivos Concluídos</h3>
-               </div>
-            </div>
-
+            <div className="flex items-center gap-3 mb-8"><div className="p-2 bg-indigo-600/10 text-indigo-500 rounded-xl"><CheckCircle2 size={24} /></div><h3 className="text-xl font-black tracking-tight">Galeria de Objetivos Concluídos</h3></div>
             {completedTasks.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {completedTasks.map(task => {
-                  // Calcular total de pontos: bônus macro + pontos de todas as microtarefas
-                  const totalEarnedPoints = (task.rewardPoints || 0) + 
-                    (task.subTasks || []).reduce((acc, st) => acc + (st.rewardPoints || 0), 0);
-                  
+                  const totalEarnedPoints = (task.rewardPoints || 0) + (task.subTasks || []).reduce((acc, st) => acc + (st.rewardPoints || 0), 0);
                   return (
                     <div key={task.id} onClick={() => handleReactivateTask(task.id)} className={`${bgCard} p-8 rounded-[3rem] border ${borderCard} shadow-sm flex flex-col justify-between group relative cursor-pointer hover:border-indigo-500 transition-all`}>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteHistoryTask(task.id); }} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={16} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteHistoryTask(task.id); }} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
                       <div>
                         <div className="flex items-center justify-between mb-4">
                           <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full flex items-center gap-1"><CheckCircle2 size={10} /> Concluído</span>
@@ -1416,6 +1425,32 @@ const App: React.FC = () => {
       )}
 
       {/* Modals */}
+      {activeModal === 'move-task' && taskToMove && (
+        <Modal title="Remanejar para outro Mês" onClose={() => { setActiveModal(null); setTaskToMove(null); }} theme={theme}>
+          <div className="space-y-4">
+            <p className="text-xs italic opacity-60 mb-6">Mover este registro alterará seu prazo planejado ou sua data de conclusão histórica.</p>
+            <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+              {monthOptions.map(month => (
+                <button
+                  key={month}
+                  onClick={() => handleMoveTaskToMonth(taskToMove, month)}
+                  className={`w-full p-4 rounded-2xl border-2 font-black text-sm text-left transition-all flex items-center justify-between group ${selectedMonth === month ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'border-transparent bg-slate-50 dark:bg-slate-800 hover:border-indigo-200'}`}
+                >
+                  {formatMonthName(month)}
+                  <ChevronRight size={16} className="opacity-0 group-hover:opacity-100" />
+                </button>
+              ))}
+            </div>
+            <button 
+              onClick={() => { setActiveModal(null); setTaskToMove(null); }}
+              className="w-full mt-4 py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 font-black rounded-2xl"
+            >
+              Cancelar
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {activeModal === 'macro' && (
         <Modal title="Novo Objetivo Macro" onClose={() => setActiveModal(null)} theme={theme}>
           <div className="space-y-6">
@@ -1748,6 +1783,12 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, the
   const total = task.subTasks.length;
   const pct = total > 0 ? (completed / total) * 100 : 0;
   const isLight = theme === 'light';
+
+  // Verifica se há alguma sub-tarefa ativa com data de hoje
+  const d = new Date();
+  const todayStr = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+  const hasTaskForToday = task.subTasks.some((st: any) => st.dueDate === todayStr && !st.completed);
+
   return (
     <div onClick={onFocus} className={`p-8 rounded-[3rem] border-2 transition-all cursor-pointer shadow-sm group relative flex flex-col justify-between h-72 ${isLight ? 'bg-white border-slate-50 hover:border-indigo-100' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/30'}`}>
       <div className="absolute top-6 right-6 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
@@ -1755,8 +1796,13 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, the
         <button onClick={onDelete} className="p-2 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
       </div>
       <div>
-        <div className="mb-4 flex flex-wrap gap-2">
+        <div className="mb-4 flex flex-wrap gap-2 items-center">
           <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${isLight ? 'bg-slate-50 text-slate-400' : 'bg-slate-800 text-slate-500'}`}>Projeto</span>
+          
+          {hasTaskForToday && (
+            <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse" title="Tem micro-tarefa para hoje!" />
+          )}
+
           {(task.totalTimeSpent || 0) > 0 && (
             <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg flex items-center gap-1 ${isLight ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-900/30 text-indigo-400'}`}>
               <Timer size={10} /> {formatTimeSpent(task.totalTimeSpent)}
