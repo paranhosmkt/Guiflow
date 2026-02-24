@@ -50,6 +50,7 @@ export interface Task {
   completedAt?: string; // ISO string date
   links?: ProjectLink[]; // Links para documentos, escopos, etc.
   pinned?: boolean; // Se a tarefa está fixada no topo
+  postIt?: string; // Comentário temporário em destaque
 }
 
 export interface Reward {

@@ -487,6 +487,22 @@ const App: React.FC = () => {
     setActiveModal(null);
   };
 
+  const [postItText, setPostItText] = useState("");
+  const [isEditingPostIt, setIsEditingPostIt] = useState(false);
+
+  const handleSavePostIt = () => {
+    if (!activeTaskId) return;
+    setTasks(prev => prev.map(t => t.id === activeTaskId ? { ...t, postIt: postItText } : t));
+    setIsEditingPostIt(false);
+  };
+
+  const handleClearPostIt = () => {
+    if (!activeTaskId) return;
+    setTasks(prev => prev.map(t => t.id === activeTaskId ? { ...t, postIt: undefined } : t));
+    setPostItText("");
+    setIsEditingPostIt(false);
+  };
+
   const handleAddLink = () => {
     if (!newLink.title.trim() || !newLink.url.trim() || !activeTaskId) return;
     
@@ -1005,6 +1021,47 @@ const App: React.FC = () => {
                         </div>
                         <h2 className="text-3xl md:text-4xl font-black mb-2 leading-tight">{activeTask.title}</h2>
                         {activeTask.description && <p className={`mb-6 italic text-sm ${textMuted}`}>"{activeTask.description}"</p>}
+                        
+                        {/* Post-it / Lembrete Temporário */}
+                        <div className="mt-6 mb-8">
+                          {isEditingPostIt ? (
+                            <div className={`p-4 rounded-2xl border-2 border-yellow-400 bg-yellow-50/50 dark:bg-yellow-900/10`}>
+                              <div className="flex items-center gap-2 mb-2 text-yellow-600 dark:text-yellow-500">
+                                <Lightbulb size={16} />
+                                <span className="text-[10px] font-black uppercase tracking-widest">Novo Lembrete</span>
+                              </div>
+                              <textarea
+                                autoFocus
+                                value={postItText}
+                                onChange={(e) => setPostItText(e.target.value)}
+                                placeholder="Digite um lembrete importante para este foco..."
+                                className={`w-full p-3 text-sm font-medium rounded-xl border outline-none resize-none h-24 ${theme === 'light' ? 'bg-white border-yellow-200 focus:border-yellow-400' : 'bg-slate-900 border-yellow-700/50 focus:border-yellow-500 text-slate-200'}`}
+                              />
+                              <div className="flex justify-end gap-2 mt-3">
+                                <button onClick={() => setIsEditingPostIt(false)} className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors ${theme === 'light' ? 'text-slate-500 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-800'}`}>Cancelar</button>
+                                <button onClick={handleSavePostIt} className="px-4 py-2 text-xs font-bold rounded-xl bg-yellow-400 text-yellow-900 hover:bg-yellow-500 transition-colors">Salvar Lembrete</button>
+                              </div>
+                            </div>
+                          ) : activeTask.postIt ? (
+                            <div className={`group relative p-5 rounded-2xl border-2 border-yellow-400 shadow-sm ${theme === 'light' ? 'bg-yellow-50' : 'bg-yellow-900/20'}`}>
+                              <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => { setPostItText(activeTask.postIt || ""); setIsEditingPostIt(true); }} className="p-1.5 text-yellow-600/60 hover:text-yellow-600 transition-colors"><Pencil size={14} /></button>
+                                <button onClick={handleClearPostIt} className="p-1.5 text-yellow-600/60 hover:text-rose-500 transition-colors"><Trash2 size={14} /></button>
+                              </div>
+                              <div className="flex items-start gap-3">
+                                <Lightbulb size={20} className="text-yellow-500 mt-0.5 flex-shrink-0" />
+                                <div>
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-yellow-600 dark:text-yellow-500 block mb-1">Lembrete Importante</span>
+                                  <p className={`text-sm font-medium whitespace-pre-wrap ${theme === 'light' ? 'text-yellow-900' : 'text-yellow-200'}`}>{activeTask.postIt}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={() => { setPostItText(""); setIsEditingPostIt(true); }} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border border-dashed transition-all text-sm font-bold ${theme === 'light' ? 'border-slate-300 text-slate-500 hover:border-yellow-400 hover:text-yellow-600 hover:bg-yellow-50' : 'border-slate-700 text-slate-400 hover:border-yellow-500/50 hover:text-yellow-500 hover:bg-yellow-900/10'}`}>
+                              <Plus size={16} /> Adicionar Lembrete (Post-it)
+                            </button>
+                          )}
+                        </div>
                         
                         <div className="mt-8">
                           <div className="flex items-center justify-between mb-4">
