@@ -49,6 +49,7 @@ export interface Task {
   totalTimeSpent?: number; // Total focused time in minutes
   completedAt?: string; // ISO string date
   links?: ProjectLink[]; // Links para documentos, escopos, etc.
+  pinned?: boolean; // Se a tarefa está fixada no topo
 }
 
 export interface Reward {

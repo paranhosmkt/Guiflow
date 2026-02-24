@@ -387,6 +387,11 @@ const App: React.FC = () => {
     }
   };
 
+  const togglePinTask = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTasks(tasks.map(t => t.id === id ? { ...t, pinned: !t.pinned } : t));
+  };
+
   const handleDeleteHistoryTask = (id: string) => {
     if (confirm("Deseja realmente remover este registro do histórico?")) {
       setCompletedTasks(prev => prev.filter(t => t.id !== id));
@@ -947,7 +952,11 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
             {tasks
               .filter(t => !t.completed)
-              .sort(sortByDueDate)
+              .sort((a, b) => {
+                if (a.pinned && !b.pinned) return -1;
+                if (!a.pinned && b.pinned) return 1;
+                return sortByDueDate(a, b);
+              })
               .map(task => (
                 <MacroCard 
                   key={task.id} 
@@ -956,6 +965,7 @@ const App: React.FC = () => {
                   onFocus={() => { setActiveTaskId(task.id); setView('local'); }} 
                   onEdit={(e: React.MouseEvent) => handleOpenEditMacro(task, e)}
                   onDelete={(e: React.MouseEvent) => handleDeleteMacro(task.id, e)} 
+                  onPin={(e: React.MouseEvent) => togglePinTask(task.id, e)}
                   formatDate={formatDate} 
                   isOverdue={isOverdue} 
                   formatTimeSpent={formatTimeSpent}
@@ -1778,7 +1788,7 @@ const NavItem = ({ active, onClick, icon, label, theme }: any) => {
   );
 };
 
-const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, theme, formatTimeSpent }: any) => {
+const MacroCard = ({ task, onFocus, onEdit, onDelete, onPin, formatDate, isOverdue, theme, formatTimeSpent }: any) => {
   const completed = task.subTasks.filter((s:any) => s.completed).length;
   const total = task.subTasks.length;
   const pct = total > 0 ? (completed / total) * 100 : 0;
@@ -1790,8 +1800,9 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, formatDate, isOverdue, the
   const hasTaskForToday = task.subTasks.some((st: any) => st.dueDate === todayStr && !st.completed);
 
   return (
-    <div onClick={onFocus} className={`p-8 rounded-[3rem] border-2 transition-all cursor-pointer shadow-sm group relative flex flex-col justify-between h-72 ${isLight ? 'bg-white border-slate-50 hover:border-indigo-100' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/30'}`}>
+    <div onClick={onFocus} className={`p-8 rounded-[3rem] border-2 transition-all cursor-pointer shadow-sm group relative flex flex-col justify-between h-72 ${task.pinned ? (isLight ? 'bg-indigo-50/50 border-indigo-200' : 'bg-indigo-950/10 border-indigo-500/50') : (isLight ? 'bg-white border-slate-50 hover:border-indigo-100' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/30')}`}>
       <div className="absolute top-6 right-6 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <button onClick={onPin} className={`p-2 transition-colors ${task.pinned ? 'text-indigo-500' : 'text-slate-400 hover:text-indigo-500'}`} title={task.pinned ? "Desafixar" : "Fixar no topo"}><Star size={16} fill={task.pinned ? "currentColor" : "none"} /></button>
         <button onClick={onEdit} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors"><Pencil size={16} /></button>
         <button onClick={onDelete} className="p-2 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
       </div>
