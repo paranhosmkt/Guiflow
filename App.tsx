@@ -276,11 +276,22 @@ const App: React.FC = () => {
             
             // Se estiver em modo TRABALHO e houver uma tarefa vinculada, atualizamos o tempo real dela
             if (timerMode === 'work' && timerBoundTaskId) {
-              setTasks(currentTasks => currentTasks.map(t => 
-                t.id === timerBoundTaskId 
-                  ? { ...t, totalTimeSpent: (t.totalTimeSpent || 0) + (actualSub / 60) } 
-                  : t
-              ));
+              setTasks(currentTasks => currentTasks.map(t => {
+                if (t.id === timerBoundTaskId) {
+                  const d = new Date();
+                  const currentMonth = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+                  const timeSpentByMonth = t.timeSpentByMonth || {};
+                  return {
+                    ...t,
+                    totalTimeSpent: (t.totalTimeSpent || 0) + (actualSub / 60),
+                    timeSpentByMonth: {
+                      ...timeSpentByMonth,
+                      [currentMonth]: (timeSpentByMonth[currentMonth] || 0) + (actualSub / 60)
+                    }
+                  };
+                }
+                return t;
+              }));
             }
             
             return nextVal;
@@ -837,6 +848,7 @@ const App: React.FC = () => {
   const filteredMetrics = useMemo(() => {
     const combinedTasks = [...tasks, ...completedTasks];
     const filtered = combinedTasks.filter(t => {
+      if (t.timeSpentByMonth && t.timeSpentByMonth[selectedMonth] > 0) return true;
       const dateToCheck = t.completed ? t.completedAt : t.dueDate;
       if (!dateToCheck) return false;
       return dateToCheck.startsWith(selectedMonth);
@@ -844,20 +856,42 @@ const App: React.FC = () => {
     
     if (filtered.length === 0) return { tasks: [], totalMinutes: 0, completedCount: 0 };
     
-    const completedCount = filtered.filter(t => t.completed).length;
-    const totalMinutes = filtered.reduce((acc, t) => acc + (t.totalTimeSpent || 0), 0);
-    const maxTime = Math.max(...filtered.map(t => t.totalTimeSpent || 0), 1);
+    const completedCount = filtered.filter(t => t.completed && t.completedAt?.startsWith(selectedMonth)).length;
+    
+    const totalMinutes = filtered.reduce((acc, t) => {
+      if (t.timeSpentByMonth && t.timeSpentByMonth[selectedMonth]) {
+        return acc + t.timeSpentByMonth[selectedMonth];
+      }
+      const dateToCheck = t.completed ? t.completedAt : t.dueDate;
+      if (dateToCheck?.startsWith(selectedMonth)) {
+        return acc + (t.totalTimeSpent || 0);
+      }
+      return acc;
+    }, 0);
+
+    const maxTime = Math.max(...filtered.map(t => {
+      if (t.timeSpentByMonth && t.timeSpentByMonth[selectedMonth]) {
+        return t.timeSpentByMonth[selectedMonth];
+      }
+      return t.totalTimeSpent || 0;
+    }), 1);
     
     return {
       totalMinutes,
       completedCount,
-      tasks: filtered.map(t => ({
-        id: t.id,
-        title: t.title,
-        time: t.totalTimeSpent || 0,
-        percentage: ((t.totalTimeSpent || 0) / maxTime) * 100,
-        completed: t.completed
-      }))
+      tasks: filtered.map(t => {
+        const timeInMonth = (t.timeSpentByMonth && t.timeSpentByMonth[selectedMonth]) 
+          ? t.timeSpentByMonth[selectedMonth] 
+          : (t.completedAt?.startsWith(selectedMonth) || t.dueDate?.startsWith(selectedMonth) ? (t.totalTimeSpent || 0) : 0);
+          
+        return {
+          id: t.id,
+          title: t.title,
+          time: timeInMonth,
+          percentage: (timeInMonth / maxTime) * 100,
+          completed: t.completed && t.completedAt?.startsWith(selectedMonth)
+        };
+      }).filter(t => t.time > 0 || t.completed)
     };
   }, [tasks, completedTasks, selectedMonth]);
 
@@ -872,6 +906,9 @@ const App: React.FC = () => {
       const date = t.completedAt || t.dueDate;
       if (date) {
         months.add(date.substring(0, 7));
+      }
+      if (t.timeSpentByMonth) {
+        Object.keys(t.timeSpentByMonth).forEach(m => months.add(m));
       }
     });
     

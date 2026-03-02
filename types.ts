@@ -47,6 +47,7 @@ export interface Task {
   subTasks: SubTask[];
   rewardPoints: number; // Bonus points for completing the whole macro project
   totalTimeSpent?: number; // Total focused time in minutes
+  timeSpentByMonth?: Record<string, number>; // Tempo focado por mês (YYYY-MM)
   completedAt?: string; // ISO string date
   links?: ProjectLink[]; // Links para documentos, escopos, etc.
   pinned?: boolean; // Se a tarefa está fixada no topo
