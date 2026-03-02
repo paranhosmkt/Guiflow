@@ -852,6 +852,7 @@ const App: React.FC = () => {
       totalMinutes,
       completedCount,
       tasks: filtered.map(t => ({
+        id: t.id,
         title: t.title,
         time: t.totalTimeSpent || 0,
         percentage: ((t.totalTimeSpent || 0) / maxTime) * 100,
