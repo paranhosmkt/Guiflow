@@ -847,42 +847,49 @@ const App: React.FC = () => {
   // Filtro de métricas avançado: Garantindo que o que foi feito no mês X apareça no mês X
   const filteredMetrics = useMemo(() => {
     const combinedTasks = [...tasks, ...completedTasks];
-    const filtered = combinedTasks.filter(t => {
-      if (t.timeSpentByMonth && t.timeSpentByMonth[selectedMonth] > 0) return true;
+    
+    const getTaskTimeForMonth = (t: Task, month: string) => {
+      let time = 0;
+      if (t.timeSpentByMonth && t.timeSpentByMonth[month]) {
+        time += t.timeSpentByMonth[month];
+      }
+      
       const dateToCheck = t.completed ? t.completedAt : t.dueDate;
-      if (!dateToCheck) return false;
-      return dateToCheck.startsWith(selectedMonth);
+      if (dateToCheck?.startsWith(month)) {
+        if (t.timeSpentByMonth) {
+           const trackedTime = Object.values(t.timeSpentByMonth).reduce((sum, val) => sum + val, 0);
+           const untrackedTime = Math.max(0, (t.totalTimeSpent || 0) - trackedTime);
+           time += untrackedTime;
+        } else {
+           time += (t.totalTimeSpent || 0);
+        }
+      }
+      return time;
+    };
+
+    const filtered = combinedTasks.filter(t => {
+      const timeInMonth = getTaskTimeForMonth(t, selectedMonth);
+      if (timeInMonth > 0) return true;
+      
+      const dateToCheck = t.completed ? t.completedAt : t.dueDate;
+      if (dateToCheck?.startsWith(selectedMonth)) return true;
+      
+      return false;
     });
     
     if (filtered.length === 0) return { tasks: [], totalMinutes: 0, completedCount: 0 };
     
     const completedCount = filtered.filter(t => t.completed && t.completedAt?.startsWith(selectedMonth)).length;
     
-    const totalMinutes = filtered.reduce((acc, t) => {
-      if (t.timeSpentByMonth && t.timeSpentByMonth[selectedMonth]) {
-        return acc + t.timeSpentByMonth[selectedMonth];
-      }
-      const dateToCheck = t.completed ? t.completedAt : t.dueDate;
-      if (dateToCheck?.startsWith(selectedMonth)) {
-        return acc + (t.totalTimeSpent || 0);
-      }
-      return acc;
-    }, 0);
+    const totalMinutes = filtered.reduce((acc, t) => acc + getTaskTimeForMonth(t, selectedMonth), 0);
 
-    const maxTime = Math.max(...filtered.map(t => {
-      if (t.timeSpentByMonth && t.timeSpentByMonth[selectedMonth]) {
-        return t.timeSpentByMonth[selectedMonth];
-      }
-      return t.totalTimeSpent || 0;
-    }), 1);
+    const maxTime = Math.max(...filtered.map(t => getTaskTimeForMonth(t, selectedMonth)), 1);
     
     return {
       totalMinutes,
       completedCount,
       tasks: filtered.map(t => {
-        const timeInMonth = (t.timeSpentByMonth && t.timeSpentByMonth[selectedMonth]) 
-          ? t.timeSpentByMonth[selectedMonth] 
-          : (t.completedAt?.startsWith(selectedMonth) || t.dueDate?.startsWith(selectedMonth) ? (t.totalTimeSpent || 0) : 0);
+        const timeInMonth = getTaskTimeForMonth(t, selectedMonth);
           
         return {
           id: t.id,
