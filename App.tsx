@@ -786,7 +786,7 @@ const App: React.FC = () => {
     } 
     // Check in completed tasks
     else if (completedTasks.some(t => t.id === taskId)) {
-      setCompletedTasks(prev => prev.map(t => t.id === taskId ? { ...t, completedAt: `${targetDate}T12:00:00.000Z` } : t));
+      setCompletedTasks(prev => prev.map(t => t.id === taskId ? { ...t, dueDate: targetDate, completedAt: `${targetDate}T12:00:00.000Z` } : t));
     }
     
     setActiveModal(null);
@@ -854,8 +854,8 @@ const App: React.FC = () => {
         time += t.timeSpentByMonth[month];
       }
       
-      const dateToCheck = t.completed ? t.completedAt : t.dueDate;
-      if (dateToCheck?.startsWith(month)) {
+      const fallbackDate = t.dueDate || t.completedAt;
+      if (fallbackDate?.startsWith(month)) {
         if (t.timeSpentByMonth) {
            const trackedTime = Object.values(t.timeSpentByMonth).reduce((sum, val) => sum + val, 0);
            const untrackedTime = Math.max(0, (t.totalTimeSpent || 0) - trackedTime);
@@ -910,10 +910,9 @@ const App: React.FC = () => {
     months.add(`${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`);
     
     combined.forEach(t => {
-      const date = t.completedAt || t.dueDate;
-      if (date) {
-        months.add(date.substring(0, 7));
-      }
+      if (t.completedAt) months.add(t.completedAt.substring(0, 7));
+      if (t.dueDate) months.add(t.dueDate.substring(0, 7));
+      
       if (t.timeSpentByMonth) {
         Object.keys(t.timeSpentByMonth).forEach(m => months.add(m));
       }
