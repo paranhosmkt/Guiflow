@@ -258,6 +258,12 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.REWARDS, JSON.stringify(rewards)); }, [rewards]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.REDEEMED_REWARDS, JSON.stringify(redeemedRewards)); }, [redeemedRewards]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(stats)); }, [stats]);
+
+  const nextReward = useMemo(() => {
+    const unaffordable = rewards.filter(r => r.cost > stats.points);
+    if (unaffordable.length === 0) return null;
+    return unaffordable.sort((a, b) => a.cost - b.cost)[0];
+  }, [rewards, stats.points]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.THEME, theme); }, [theme]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.MONTHLY_GOALS, JSON.stringify(monthlyGoals)); }, [monthlyGoals]);
 
@@ -371,41 +377,45 @@ const App: React.FC = () => {
 
   // Setup PiP elements
   useEffect(() => {
-    if (!canvasRef.current) {
-      canvasRef.current = document.createElement('canvas');
-      canvasRef.current.width = 400;
-      canvasRef.current.height = 400;
-    }
-    if (!videoRef.current) {
-      videoRef.current = document.createElement('video');
-      videoRef.current.muted = true;
-      videoRef.current.playsInline = true;
-      videoRef.current.addEventListener('leavepictureinpicture', () => {
-        setIsPipActive(false);
-      });
-      videoRef.current.addEventListener('play', () => {
-        if (isProgrammaticPlayRef.current) return;
-        setIsTimerActive(prev => {
-          if (!prev) {
-            if (timerModeRef.current === 'work' && activeTaskIdRef.current) {
-              setTimerBoundTaskId(activeTaskIdRef.current);
-            }
-            return true;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleLeavePiP = () => {
+      setIsPipActive(false);
+    };
+    
+    const handlePlay = () => {
+      if (isProgrammaticPlayRef.current) return;
+      setIsTimerActive(prev => {
+        if (!prev) {
+          if (timerModeRef.current === 'work' && activeTaskIdRef.current) {
+            setTimerBoundTaskId(activeTaskIdRef.current);
           }
-          return prev;
-        });
+          return true;
+        }
+        return prev;
       });
-      videoRef.current.addEventListener('pause', () => {
-        if (isProgrammaticPlayRef.current) return;
-        setIsTimerActive(prev => {
-          if (prev) {
-            // Se estava rodando e o usuário deu pause no PiP
-            return false;
-          }
-          return prev;
-        });
+    };
+    
+    const handlePause = () => {
+      if (isProgrammaticPlayRef.current) return;
+      setIsTimerActive(prev => {
+        if (prev) {
+          return false;
+        }
+        return prev;
       });
-    }
+    };
+
+    video.addEventListener('leavepictureinpicture', handleLeavePiP);
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+
+    return () => {
+      video.removeEventListener('leavepictureinpicture', handleLeavePiP);
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+    };
   }, []);
 
   // Sync video state with timer state
@@ -495,6 +505,9 @@ const App: React.FC = () => {
       if (document.pictureInPictureElement) {
         await document.exitPictureInPicture();
         setIsPipActive(false);
+      } else if ((document as any).webkitPictureInPictureElement) {
+        await (document as any).webkitExitPictureInPicture();
+        setIsPipActive(false);
       } else {
         if (!canvasRef.current || !videoRef.current) return;
         
@@ -503,13 +516,37 @@ const App: React.FC = () => {
           videoRef.current.srcObject = stream;
         }
         
+        // Draw an initial frame so the video stream has content to play
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = timerMode === 'work' ? '#1e1b4b' : '#064e3b';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          const centerX = canvas.width / 2;
+          const centerY = canvas.height / 2;
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 80px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const mins = Math.floor(timerSeconds / 60).toString().padStart(2, '0');
+          const secs = (timerSeconds % 60).toString().padStart(2, '0');
+          ctx.fillText(`${mins}:${secs}`, centerX, centerY);
+        }
+        
         isProgrammaticPlayRef.current = true;
         await videoRef.current.play();
         if (!isTimerActive) {
           videoRef.current.pause();
         }
         
-        await videoRef.current.requestPictureInPicture();
+        if (videoRef.current.requestPictureInPicture) {
+          await videoRef.current.requestPictureInPicture();
+        } else if ((videoRef.current as any).webkitSetPresentationMode) {
+          (videoRef.current as any).webkitSetPresentationMode('picture-in-picture');
+        } else {
+          throw new Error("Picture-in-Picture não é suportado neste navegador.");
+        }
+        
         setIsPipActive(true);
         
         setTimeout(() => {
@@ -1132,9 +1169,31 @@ const App: React.FC = () => {
         <div className="hidden md:mt-auto md:block w-full">
           <div className="bg-slate-900 dark:bg-black p-5 rounded-[2rem] text-white shadow-xl border border-slate-800">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Pontos Atuais</p>
-            <div className="text-3xl font-black text-indigo-400 flex items-baseline gap-1">
+            <div className="text-3xl font-black text-indigo-400 flex items-baseline gap-1 mb-4">
               {stats.points} <span className="text-xs text-slate-400">pts</span>
             </div>
+            {nextReward && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <span className="truncate mr-2">{nextReward.title}</span>
+                  <span>{nextReward.cost} pts</span>
+                </div>
+                <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out"
+                    style={{ width: `${Math.min(100, (stats.points / nextReward.cost) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-[9px] text-slate-500 font-medium text-right">
+                  Faltam {nextReward.cost - stats.points} pts
+                </p>
+              </div>
+            )}
+            {!nextReward && rewards.length > 0 && (
+              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 text-center bg-emerald-900/20 py-2 rounded-xl">
+                Tudo desbloqueado!
+              </div>
+            )}
           </div>
         </div>
       </nav>
@@ -1170,6 +1229,49 @@ const App: React.FC = () => {
              )}
           </div>
         </header>
+
+        {/* Mobile Points Progress */}
+        {view !== 'rewards' && (
+          <div className="md:hidden mb-8">
+            <div className={`${theme === 'light' ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'} p-5 rounded-[2rem] border shadow-sm`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center">
+                    <Trophy size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Pontos</p>
+                    <p className="text-xl font-black leading-none text-indigo-600 dark:text-indigo-400">{stats.points}</p>
+                  </div>
+                </div>
+                {nextReward && (
+                  <div className="text-right">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Próximo Prêmio</p>
+                    <p className="text-sm font-bold truncate max-w-[120px]">{nextReward.title}</p>
+                  </div>
+                )}
+              </div>
+              {nextReward && (
+                <div className="space-y-2">
+                  <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out"
+                      style={{ width: `${Math.min(100, (stats.points / nextReward.cost) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-medium text-right">
+                    Faltam {nextReward.cost - stats.points} pts
+                  </p>
+                </div>
+              )}
+              {!nextReward && rewards.length > 0 && (
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 text-center bg-emerald-50 dark:bg-emerald-900/20 py-2 rounded-xl">
+                  Tudo desbloqueado!
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Render Views */}
         {view === 'global' && (
@@ -1483,11 +1585,36 @@ const App: React.FC = () => {
         {view === 'rewards' && (
           <div className="space-y-12 animate-in fade-in duration-500">
             <div className={`${theme === 'light' ? 'bg-slate-900' : 'bg-black'} rounded-[3rem] p-10 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl border border-slate-800`}>
-               <div>
+               <div className="flex-1 w-full">
                   <p className="text-indigo-400 font-black uppercase tracking-widest text-xs mb-2">Saldo de Recompensas</p>
-                  <h3 className="text-6xl font-black tabular-nums">{stats.points} <span className="text-xl text-slate-500 uppercase">pts</span></h3>
+                  <h3 className="text-6xl font-black tabular-nums mb-6">{stats.points} <span className="text-xl text-slate-500 uppercase">pts</span></h3>
+                  
+                  {nextReward && (
+                    <div className="w-full max-w-md space-y-3">
+                      <div className="flex justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
+                        <span className="truncate mr-2">Próximo: {nextReward.title}</span>
+                        <span>{nextReward.cost} pts</span>
+                      </div>
+                      <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out relative overflow-hidden"
+                          style={{ width: `${Math.min(100, (stats.points / nextReward.cost) * 100)}%` }}
+                        >
+                          <div className="absolute inset-0 bg-white/20 w-full animate-[shimmer_2s_infinite] -translate-x-full" style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)' }} />
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 font-medium text-right">
+                        Faltam <span className="text-indigo-400 font-bold">{nextReward.cost - stats.points}</span> pts
+                      </p>
+                    </div>
+                  )}
+                  {!nextReward && rewards.length > 0 && (
+                    <div className="w-full max-w-md text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-900/20 py-3 px-4 rounded-xl border border-emerald-800/30">
+                      🎉 Você tem pontos suficientes para resgatar qualquer prêmio!
+                    </div>
+                  )}
                </div>
-               <div className="w-24 h-24 bg-indigo-600 rounded-3xl flex items-center justify-center rotate-6 shadow-xl"><Trophy size={48} /></div>
+               <div className="w-32 h-32 bg-indigo-600 rounded-3xl flex items-center justify-center rotate-6 shadow-xl shrink-0"><Trophy size={64} /></div>
             </div>
 
             <div className="space-y-6">
@@ -1503,11 +1630,25 @@ const App: React.FC = () => {
                     <div>
                       <h4 className="text-xl font-black mb-1">{reward.title}</h4>
                       <p className="text-indigo-500 font-black text-sm uppercase tracking-wider">{reward.cost} pontos</p>
+                      
+                      {stats.points < reward.cost && (
+                        <div className="mt-4 space-y-2">
+                          <div className="h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-indigo-400 rounded-full transition-all duration-1000"
+                              style={{ width: `${Math.min(100, (stats.points / reward.cost) * 100)}%` }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider text-right">
+                            Faltam {reward.cost - stats.points} pts
+                          </p>
+                        </div>
+                      )}
                     </div>
                     <button 
                       disabled={stats.points < reward.cost}
                       onClick={() => handleRedeemReward(reward)}
-                      className={`mt-8 w-full py-4 rounded-2xl font-black transition-all ${stats.points >= reward.cost ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-900/20' : (theme === 'light' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-800 text-slate-600 cursor-not-allowed')}`}
+                      className={`mt-6 w-full py-4 rounded-2xl font-black transition-all ${stats.points >= reward.cost ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-900/20' : (theme === 'light' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-800 text-slate-600 cursor-not-allowed')}`}
                     >Resgatar</button>
                   </div>
                 ))}
@@ -2047,6 +2188,10 @@ const App: React.FC = () => {
           </div>
         </Modal>
       )}
+
+      {/* Hidden elements for PiP */}
+      <canvas ref={canvasRef} width={400} height={400} className="hidden" />
+      <video ref={videoRef} muted playsInline className="hidden" />
     </div>
   );
 };
