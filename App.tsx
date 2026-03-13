@@ -52,7 +52,8 @@ import {
   Maximize2,
   ChevronDown,
   Copy,
-  CalendarDays
+  CalendarDays,
+  PictureInPicture2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink, MonthlyGoal, RedeemedReward } from './types';
@@ -220,6 +221,20 @@ const App: React.FC = () => {
   const timerRef = useRef<number | null>(null);
   const lastTickRef = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const timerModeRef = useRef(timerMode);
+  const activeTaskIdRef = useRef(activeTaskId);
+  const isProgrammaticPlayRef = useRef(false);
+  const [isPipActive, setIsPipActive] = useState(false);
+
+  useEffect(() => {
+    timerModeRef.current = timerMode;
+  }, [timerMode]);
+
+  useEffect(() => {
+    activeTaskIdRef.current = activeTaskId;
+  }, [activeTaskId]);
 
   const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | 'settings' | 'duplicate-task' | 'move-task' | null>(null);
   const [taskToMove, setTaskToMove] = useState<string | null>(null);
@@ -311,10 +326,12 @@ const App: React.FC = () => {
   }, [timerSeconds, isTimerActive]);
 
   const toggleTimer = () => {
-    if (!isTimerActive && timerMode === 'work' && activeTaskId) {
-      setTimerBoundTaskId(activeTaskId);
-    }
-    setIsTimerActive(!isTimerActive);
+    setIsTimerActive(prev => {
+      if (!prev && timerMode === 'work' && activeTaskId) {
+        setTimerBoundTaskId(activeTaskId);
+      }
+      return !prev;
+    });
   };
 
   const handleTimerComplete = () => {
@@ -350,6 +367,159 @@ const App: React.FC = () => {
     setTimerMode('work');
     setTimerSeconds(workDuration * 60);
     setCyclesCompleted(0);
+  };
+
+  // Setup PiP elements
+  useEffect(() => {
+    if (!canvasRef.current) {
+      canvasRef.current = document.createElement('canvas');
+      canvasRef.current.width = 400;
+      canvasRef.current.height = 400;
+    }
+    if (!videoRef.current) {
+      videoRef.current = document.createElement('video');
+      videoRef.current.muted = true;
+      videoRef.current.playsInline = true;
+      videoRef.current.addEventListener('leavepictureinpicture', () => {
+        setIsPipActive(false);
+      });
+      videoRef.current.addEventListener('play', () => {
+        if (isProgrammaticPlayRef.current) return;
+        setIsTimerActive(prev => {
+          if (!prev) {
+            if (timerModeRef.current === 'work' && activeTaskIdRef.current) {
+              setTimerBoundTaskId(activeTaskIdRef.current);
+            }
+            return true;
+          }
+          return prev;
+        });
+      });
+      videoRef.current.addEventListener('pause', () => {
+        if (isProgrammaticPlayRef.current) return;
+        setIsTimerActive(prev => {
+          if (prev) {
+            // Se estava rodando e o usuário deu pause no PiP
+            return false;
+          }
+          return prev;
+        });
+      });
+    }
+  }, []);
+
+  // Sync video state with timer state
+  useEffect(() => {
+    if (videoRef.current && isPipActive) {
+      if (isTimerActive && videoRef.current.paused) {
+        isProgrammaticPlayRef.current = true;
+        videoRef.current.play().then(() => {
+          isProgrammaticPlayRef.current = false;
+        }).catch(e => {
+          console.error(e);
+          isProgrammaticPlayRef.current = false;
+        });
+      } else if (!isTimerActive && !videoRef.current.paused) {
+        isProgrammaticPlayRef.current = true;
+        videoRef.current.pause();
+        isProgrammaticPlayRef.current = false;
+      }
+    }
+  }, [isTimerActive, isPipActive]);
+
+  // Draw PiP
+  useEffect(() => {
+    if (!isPipActive || !canvasRef.current || !videoRef.current) return;
+
+    let animationFrameId: number;
+
+    const drawPiP = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Clear
+      ctx.fillStyle = timerMode === 'work' ? '#1e1b4b' : '#064e3b'; // dark indigo or emerald
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw circle
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const radius = 160;
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.lineWidth = 16;
+      ctx.stroke();
+
+      // Draw progress
+      const totalSeconds = timerMode === 'work' ? workDuration * 60 : (cyclesCompleted % cyclesUntilLongBreak === 0 && cyclesCompleted > 0 ? longBreakDuration * 60 : shortBreakDuration * 60);
+      const progress = 1 - (timerSeconds / totalSeconds);
+      
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, -Math.PI / 2, (-Math.PI / 2) + (2 * Math.PI * progress));
+      ctx.strokeStyle = timerMode === 'work' ? '#f43f5e' : '#10b981'; // rose or emerald
+      ctx.lineWidth = 16;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Draw text
+      const mins = Math.floor(timerSeconds / 60).toString().padStart(2, '0');
+      const secs = (timerSeconds % 60).toString().padStart(2, '0');
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 80px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${mins}:${secs}`, centerX, centerY);
+
+      // Draw mode text
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.fillText(timerMode === 'work' ? 'FOCO' : 'PAUSA', centerX, centerY + 80);
+
+      animationFrameId = requestAnimationFrame(drawPiP);
+    };
+
+    drawPiP();
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [isPipActive, timerSeconds, timerMode, workDuration, shortBreakDuration, longBreakDuration, cyclesCompleted, cyclesUntilLongBreak]);
+
+  const togglePiP = async () => {
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+        setIsPipActive(false);
+      } else {
+        if (!canvasRef.current || !videoRef.current) return;
+        
+        if (!videoRef.current.srcObject) {
+          const stream = canvasRef.current.captureStream(30);
+          videoRef.current.srcObject = stream;
+        }
+        
+        isProgrammaticPlayRef.current = true;
+        await videoRef.current.play();
+        if (!isTimerActive) {
+          videoRef.current.pause();
+        }
+        
+        await videoRef.current.requestPictureInPicture();
+        setIsPipActive(true);
+        
+        setTimeout(() => {
+          isProgrammaticPlayRef.current = false;
+        }, 100);
+      }
+    } catch (error) {
+      console.error("Erro ao ativar Picture-in-Picture:", error);
+      alert("Seu navegador não suporta o modo Pop-up (Picture-in-Picture) ou ele foi bloqueado.");
+    }
   };
 
   const handleCreateMacro = () => {
@@ -1142,12 +1312,21 @@ const App: React.FC = () => {
                   <div className="xl:col-span-1 flex flex-col gap-4">
                     <div className={`p-6 md:p-8 rounded-[3rem] border-2 shadow-sm flex flex-col items-center justify-center transition-all relative overflow-hidden ${timerFlash ? 'animate-pulse scale-105' : ''} ${timerMode === 'work' ? (theme === 'light' ? 'bg-rose-50 border-rose-100' : 'bg-rose-950/20 border-rose-900/50') : (theme === 'light' ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-950/20 border-emerald-900/50')}`}>
                       
-                      <button 
-                        onClick={() => setShowTimerSettings(!showTimerSettings)}
-                        className={`absolute top-6 right-6 p-2 rounded-xl transition-all ${theme === 'light' ? 'bg-white/60 text-slate-400 hover:text-indigo-600' : 'bg-black/20 text-slate-500 hover:text-indigo-400'}`}
-                      >
-                        <Settings size={18} />
-                      </button>
+                      <div className="absolute top-6 right-6 flex items-center gap-2">
+                        <button 
+                          onClick={togglePiP}
+                          title="Modo Pop-up (Picture-in-Picture)"
+                          className={`p-2 rounded-xl transition-all ${isPipActive ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : theme === 'light' ? 'bg-white/60 text-slate-400 hover:text-indigo-600' : 'bg-black/20 text-slate-500 hover:text-indigo-400'}`}
+                        >
+                          <PictureInPicture2 size={18} />
+                        </button>
+                        <button 
+                          onClick={() => setShowTimerSettings(!showTimerSettings)}
+                          className={`p-2 rounded-xl transition-all ${theme === 'light' ? 'bg-white/60 text-slate-400 hover:text-indigo-600' : 'bg-black/20 text-slate-500 hover:text-indigo-400'}`}
+                        >
+                          <Settings size={18} />
+                        </button>
+                      </div>
 
                       <div className="flex items-center gap-2 mb-2">
                          {timerMode === 'work' ? <Timer className="text-rose-500" size={16} /> : <Coffee className="text-emerald-500" size={16} />}
