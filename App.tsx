@@ -1215,7 +1215,7 @@ const App: React.FC = () => {
              {view === 'global' && (
                <>
                 <button onClick={() => setActiveModal('monthly')} className={`px-6 py-3 rounded-2xl font-black shadow-lg flex items-center gap-2 transition-all hover:scale-105 active:scale-95 ${theme === 'light' ? 'bg-white text-indigo-600 border border-indigo-100 shadow-indigo-100/50' : 'bg-slate-800 text-indigo-400 border border-slate-700 shadow-black/20'}`}>
-                  <CalendarCheck size={20} /> Objetivos do Mês
+                  <CalendarCheck size={20} /> Checklist
                 </button>
                 <button onClick={() => setActiveModal('macro')} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-indigo-200/50 hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
                   <Plus size={20} /> Novo Objetivo
@@ -1897,7 +1897,7 @@ const App: React.FC = () => {
       )}
 
       {activeModal === 'monthly' && (
-        <Modal title="Objetivos do Mês" onClose={() => setActiveModal(null)} theme={theme}>
+        <Modal title="Checklist" onClose={() => setActiveModal(null)} theme={theme}>
           <div className="space-y-6">
             <p className={`text-xs italic ${textMuted}`}>Orientação estratégica para seus objetivos macro.</p>
             
@@ -1921,7 +1921,7 @@ const App: React.FC = () => {
 
             <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
               {monthlyGoals.length > 0 ? (
-                monthlyGoals.map(goal => (
+                [...monthlyGoals].sort((a, b) => (a.completed === b.completed ? 0 : a.completed ? 1 : -1)).map(goal => (
                   <div key={goal.id} className={`flex items-center gap-3 p-3 rounded-xl border group transition-all ${goal.completed ? (theme === 'light' ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-950/20 border-emerald-900/40') : (theme === 'light' ? 'bg-white border-slate-100' : 'bg-slate-800/50 border-slate-700')}`}>
                     <button 
                       onClick={() => toggleMonthlyGoal(goal.id)}
