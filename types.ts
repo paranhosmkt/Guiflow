@@ -28,6 +28,7 @@ export interface SubTask {
   status: TaskStatus;
   rewardPoints: number; // Points awarded when this specific sub-task is completed
   dueDate?: string; // Optional deadline for the sub-task
+  urgency?: number; // Urgency level (e.g., 1 to 3)
   notes?: string; // Comentário ou observação sobre a micro-tarefa
   link?: string; // Link de referência para a micro-tarefa
   archived?: boolean; // Se a tarefa foi arquivada da visão local

@@ -242,7 +242,7 @@ const App: React.FC = () => {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
   const [newTaskDate, setNewTaskDate] = useState("");
-  const [taskToProject, setTaskToProject] = useState({ title: "", notes: "", link: "", points: 5, projectId: "", dueDate: "" });
+  const [taskToProject, setTaskToProject] = useState({ title: "", notes: "", link: "", points: 5, projectId: "", dueDate: "", urgency: 1 });
   const [newReward, setNewReward] = useState({ title: "", cost: 50, icon: "🎁" });
   const [newLink, setNewLink] = useState({ title: "", url: "" });
   const [newMonthlyGoal, setNewMonthlyGoal] = useState("");
@@ -277,6 +277,15 @@ const App: React.FC = () => {
     if (!a.dueDate) return 1;
     if (!b.dueDate) return -1;
     return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+  };
+
+  const sortByUrgency = (a: { urgency?: number, dueDate?: string }, b: { urgency?: number, dueDate?: string }) => {
+    const urgencyA = a.urgency || 1;
+    const urgencyB = b.urgency || 1;
+    if (urgencyA !== urgencyB) {
+      return urgencyB - urgencyA;
+    }
+    return sortByDueDate(a, b);
   };
 
   // Temporizador com lógica de sincronização por Delta de tempo
@@ -697,11 +706,12 @@ const App: React.FC = () => {
       completed: false, 
       status: 'todo',
       rewardPoints: taskToProject.points,
-      dueDate: taskToProject.dueDate
+      dueDate: taskToProject.dueDate,
+      urgency: taskToProject.urgency
     };
 
     setTasks(prev => prev.map(t => t.id === targetId ? { ...t, subTasks: [...t.subTasks, newSub] } : t));
-    setTaskToProject({ title: "", notes: "", link: "", points: 5, projectId: "", dueDate: "" });
+    setTaskToProject({ title: "", notes: "", link: "", points: 5, projectId: "", dueDate: "", urgency: 1 });
     setActiveModal(null);
   };
 
@@ -1533,7 +1543,7 @@ const App: React.FC = () => {
                   <KanbanCol 
                     title="A Fazer" 
                     theme={theme} 
-                    tasks={activeTask.subTasks.filter(s => s.status === 'todo').sort(sortByDueDate)} 
+                    tasks={activeTask.subTasks.filter(s => s.status === 'todo').sort(sortByUrgency)} 
                     onDrop={() => onDrop('todo')} 
                     onDragOver={(e: React.DragEvent) => e.preventDefault()} 
                     onDragStart={setDraggedSubTaskId} 
@@ -1546,7 +1556,7 @@ const App: React.FC = () => {
                   <KanbanCol 
                     title="Fazendo" 
                     theme={theme} 
-                    tasks={activeTask.subTasks.filter(s => s.status === 'doing').sort(sortByDueDate)} 
+                    tasks={activeTask.subTasks.filter(s => s.status === 'doing').sort(sortByUrgency)} 
                     onDrop={() => onDrop('doing')} 
                     onDragOver={(e: React.DragEvent) => e.preventDefault()} 
                     onDragStart={setDraggedSubTaskId} 
@@ -1560,7 +1570,7 @@ const App: React.FC = () => {
                   <KanbanCol 
                     title="Concluído" 
                     theme={theme} 
-                    tasks={activeTask.subTasks.filter(s => s.status === 'done' && !s.archived).sort(sortByDueDate)} 
+                    tasks={activeTask.subTasks.filter(s => s.status === 'done' && !s.archived).sort(sortByUrgency)} 
                     onDrop={() => onDrop('done')} 
                     onDragOver={(e: React.DragEvent) => e.preventDefault()} 
                     onDragStart={setDraggedSubTaskId} 
@@ -1966,31 +1976,28 @@ const App: React.FC = () => {
               <input autoFocus value={taskToProject.title} onChange={e => setTaskToProject({...taskToProject, title: e.target.value})} placeholder="Ex: Tirar o lixo da mesa" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             
-            <div>
-              <label className={`text-[10px] font-black uppercase tracking-widest mb-4 block ${textMuted}`}>Nível de Esforço</label>
-              <div className="grid grid-cols-1 gap-3">
-                {COMPLEXITY_LEVELS.map((level) => (
-                  <button
-                    key={level.id}
-                    onClick={() => setTaskToProject({ ...taskToProject, points: level.points })}
-                    className={`p-4 rounded-2xl border-2 transition-all text-left flex items-start gap-4 ${
-                      taskToProject.points === level.points 
-                        ? (theme === 'light' ? 'border-indigo-600 bg-indigo-50 shadow-sm' : 'border-indigo-400 bg-indigo-900/20 shadow-sm') 
-                        : (theme === 'light' ? 'border-slate-100 bg-slate-50 hover:border-slate-200' : 'border-slate-800 bg-slate-800 hover:border-slate-700')
-                    }`}
-                  >
-                    <div className={`p-2 rounded-xl ${taskToProject.points === level.points ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-400'}`}>
-                      {level.icon}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-center mb-0.5">
-                        <span className="font-bold text-sm">{level.label}</span>
-                        <span className={`text-[10px] font-black ${taskToProject.points === level.points ? 'text-indigo-500' : 'text-slate-400'}`}>+{level.points} PTS</span>
-                      </div>
-                      <p className={`text-[10px] opacity-60 leading-tight ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>{level.example}</p>
-                    </div>
-                  </button>
-                ))}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Pontuação</label>
+                <input type="number" min="1" value={taskToProject.points} onChange={e => setTaskToProject({...taskToProject, points: parseInt(e.target.value) || 0})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+              </div>
+              <div>
+                <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Grau de Urgência</label>
+                <div className="flex gap-2">
+                  {[
+                    { id: 1, label: 'Baixa', color: 'bg-blue-500' },
+                    { id: 2, label: 'Média', color: 'bg-amber-500' },
+                    { id: 3, label: 'Alta', color: 'bg-rose-500' }
+                  ].map(u => (
+                    <button
+                      key={u.id}
+                      onClick={() => setTaskToProject({...taskToProject, urgency: u.id})}
+                      className={`flex-1 py-4 rounded-xl font-bold text-xs border-2 transition-all ${taskToProject.urgency === u.id ? `${u.color} text-white border-transparent` : (theme === 'light' ? 'bg-white border-slate-200 text-slate-500 hover:border-slate-300' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600')}`}
+                    >
+                      {u.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -2042,23 +2049,28 @@ const App: React.FC = () => {
               <input autoFocus value={editingSubTask.subTask.title} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, title: e.target.value}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             
-            <div>
-              <label className={`text-[10px] font-black uppercase tracking-widest mb-4 block ${textMuted}`}>Nível de Esforço</label>
-              <div className="grid grid-cols-1 gap-2">
-                {COMPLEXITY_LEVELS.map((level) => (
-                  <button
-                    key={level.id}
-                    onClick={() => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, rewardPoints: level.points}})}
-                    className={`p-3 rounded-2xl border-2 transition-all text-left flex items-center gap-3 ${
-                      editingSubTask.subTask.rewardPoints === level.points 
-                        ? (theme === 'light' ? 'border-indigo-600 bg-indigo-50' : 'border-indigo-400 bg-indigo-900/20') 
-                        : (theme === 'light' ? 'border-slate-100 bg-slate-50' : 'border-slate-800 bg-slate-800')
-                    }`}
-                  >
-                    <div className="flex-1 font-bold text-sm">{level.label}</div>
-                    <div className="text-[10px] font-black text-indigo-500">+{level.points} PTS</div>
-                  </button>
-                ))}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Pontuação</label>
+                <input type="number" min="1" value={editingSubTask.subTask.rewardPoints} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, rewardPoints: parseInt(e.target.value) || 0}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
+              </div>
+              <div>
+                <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Grau de Urgência</label>
+                <div className="flex gap-2">
+                  {[
+                    { id: 1, label: 'Baixa', color: 'bg-blue-500' },
+                    { id: 2, label: 'Média', color: 'bg-amber-500' },
+                    { id: 3, label: 'Alta', color: 'bg-rose-500' }
+                  ].map(u => (
+                    <button
+                      key={u.id}
+                      onClick={() => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, urgency: u.id}})}
+                      className={`flex-1 py-4 rounded-xl font-bold text-xs border-2 transition-all ${(editingSubTask.subTask.urgency || 1) === u.id ? `${u.color} text-white border-transparent` : (theme === 'light' ? 'bg-white border-slate-200 text-slate-500 hover:border-slate-300' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600')}`}
+                    >
+                      {u.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -2297,6 +2309,11 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTas
                   </div>
                   <div className="flex flex-wrap items-center gap-3 mt-2">
                     <div className="flex items-center gap-1 text-[10px] font-black text-indigo-500 uppercase"><Zap size={10} fill="currentColor" /> +{t.rewardPoints} pts</div>
+                    {t.urgency && (
+                      <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${t.urgency === 3 ? 'text-rose-500' : t.urgency === 2 ? 'text-amber-500' : 'text-blue-500'}`}>
+                        <AlertCircle size={10} /> {t.urgency === 3 ? 'Alta' : t.urgency === 2 ? 'Média' : 'Baixa'}
+                      </div>
+                    )}
                     {t.dueDate && !t.completed && (
                       <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${isOverdue(t.dueDate) ? 'text-rose-500' : 'text-emerald-500'}`}><Calendar size={10} /> {formatDate(t.dueDate)}</div>
                     )}
