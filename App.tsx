@@ -1043,13 +1043,22 @@ const App: React.FC = () => {
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   };
 
+  const getLocalDateStr = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const isOverdue = (dateStr: string) => {
     if (!dateStr) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const date = new Date(dateStr);
-    date.setHours(23, 59, 59, 999); 
-    return date < today;
+    return dateStr < getLocalDateStr();
+  };
+
+  const isDueToday = (dateStr: string) => {
+    if (!dateStr) return false;
+    return dateStr === getLocalDateStr();
   };
 
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
@@ -1304,6 +1313,7 @@ const App: React.FC = () => {
                   onPin={(e: React.MouseEvent) => togglePinTask(task.id, e)}
                   formatDate={formatDate} 
                   isOverdue={isOverdue} 
+                  isDueToday={isDueToday}
                   formatTimeSpent={formatTimeSpent}
                 />
             ))}
@@ -1331,7 +1341,7 @@ const App: React.FC = () => {
                           </button>
                           <span className="bg-indigo-600/10 text-indigo-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Foco Atual</span>
                           {activeTask.dueDate && (
-                            <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isOverdue(activeTask.dueDate) ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                            <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isOverdue(activeTask.dueDate) ? 'bg-rose-500/10 text-rose-500' : isDueToday(activeTask.dueDate) ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
                               <Calendar size={10} /> Prazo: {formatDate(activeTask.dueDate)}
                             </span>
                           )}
@@ -1552,6 +1562,7 @@ const App: React.FC = () => {
                     onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} 
                     formatDate={formatDate} 
                     isOverdue={isOverdue} 
+                    isDueToday={isDueToday}
                   />
                   <KanbanCol 
                     title="Fazendo" 
@@ -1565,6 +1576,7 @@ const App: React.FC = () => {
                     onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} 
                     formatDate={formatDate} 
                     isOverdue={isOverdue} 
+                    isDueToday={isDueToday}
                     highlight 
                   />
                   <KanbanCol 
@@ -1579,6 +1591,7 @@ const App: React.FC = () => {
                     onDeleteSubTask={(subId: string) => handleDeleteSubTask(activeTask.id, subId)} 
                     formatDate={formatDate} 
                     isOverdue={isOverdue} 
+                    isDueToday={isDueToday}
                     onArchive={() => handleArchiveDoneSubTasks(activeTask.id)}
                   />
                 </div>
@@ -2219,7 +2232,7 @@ const NavItem = ({ active, onClick, icon, label, theme }: any) => {
   );
 };
 
-const MacroCard = ({ task, onFocus, onEdit, onDelete, onPin, formatDate, isOverdue, theme, formatTimeSpent }: any) => {
+const MacroCard = ({ task, onFocus, onEdit, onDelete, onPin, formatDate, isOverdue, isDueToday, theme, formatTimeSpent }: any) => {
   const completed = task.subTasks.filter((s:any) => s.completed).length;
   const total = task.subTasks.length;
   const pct = total > 0 ? (completed / total) * 100 : 0;
@@ -2251,7 +2264,7 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, onPin, formatDate, isOverd
             </span>
           )}
           {task.dueDate && (
-            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg flex items-center gap-1 ${isOverdue(task.dueDate) ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg flex items-center gap-1 ${isOverdue(task.dueDate) ? 'bg-rose-500/10 text-rose-500' : isDueToday(task.dueDate) ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
               <Calendar size={10} /> {formatDate(task.dueDate)}
             </span>
           )}
@@ -2271,7 +2284,7 @@ const MacroCard = ({ task, onFocus, onEdit, onDelete, onPin, formatDate, isOverd
   );
 };
 
-const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTask, onDuplicateSubTask, onDeleteSubTask, formatDate, isOverdue, highlight, theme, onArchive }: any) => {
+const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTask, onDuplicateSubTask, onDeleteSubTask, formatDate, isOverdue, isDueToday, highlight, theme, onArchive }: any) => {
   const isLight = theme === 'light';
   return (
     <div className={`flex flex-col h-full rounded-[3rem] p-5 border-2 border-dashed ${highlight ? (isLight ? 'bg-indigo-50/20 border-indigo-100' : 'bg-indigo-950/10 border-indigo-900/30') : (isLight ? 'bg-slate-50/50 border-slate-200' : 'bg-slate-900/20 border-slate-800/50')}`} onDrop={onDrop} onDragOver={onDragOver}>
@@ -2315,7 +2328,7 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTas
                       </div>
                     )}
                     {t.dueDate && !t.completed && (
-                      <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${isOverdue(t.dueDate) ? 'text-rose-500' : 'text-emerald-500'}`}><Calendar size={10} /> {formatDate(t.dueDate)}</div>
+                      <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${isOverdue(t.dueDate) ? 'text-rose-500' : isDueToday(t.dueDate) ? 'text-amber-500' : 'text-emerald-500'}`}><Calendar size={10} /> {formatDate(t.dueDate)}</div>
                     )}
                   </div>
                </div>
