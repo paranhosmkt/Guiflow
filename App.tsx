@@ -53,7 +53,8 @@ import {
   ChevronDown,
   Copy,
   CalendarDays,
-  PictureInPicture2
+  PictureInPicture2,
+  Kanban
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink, MonthlyGoal, RedeemedReward } from './types';
@@ -192,7 +193,7 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [view, setView] = useState<'global' | 'local' | 'rewards' | 'history' | 'metrics'>('global');
+  const [view, setView] = useState<'global' | 'global-kanban' | 'local' | 'rewards' | 'history' | 'metrics'>('global');
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [motivation, setMotivation] = useState("");
   const [draggedSubTaskId, setDraggedSubTaskId] = useState<string | null>(null);
@@ -695,7 +696,7 @@ const App: React.FC = () => {
   };
 
   const handleAddTaskToProject = () => {
-    const targetId = taskToProject.projectId || activeTaskId;
+    const targetId = view === 'global-kanban' ? taskToProject.projectId : (taskToProject.projectId || activeTaskId);
     if (!taskToProject.title.trim() || !targetId) return;
 
     const newSub: SubTask = { 
@@ -1018,8 +1019,15 @@ const App: React.FC = () => {
   }, [activeTask]);
 
   const onDrop = (status: TaskStatus) => {
-    if (draggedSubTaskId && activeTask) {
-      changeSubTaskStatus(activeTask.id, draggedSubTaskId, status);
+    if (draggedSubTaskId) {
+      if (view === 'local' && activeTask) {
+        changeSubTaskStatus(activeTask.id, draggedSubTaskId, status);
+      } else if (view === 'global-kanban') {
+        const parentTask = tasks.find(t => t.subTasks.some(st => st.id === draggedSubTaskId));
+        if (parentTask) {
+          changeSubTaskStatus(parentTask.id, draggedSubTaskId, status);
+        }
+      }
       setDraggedSubTaskId(null);
     }
   };
@@ -1174,6 +1182,7 @@ const App: React.FC = () => {
         
         <div className="flex w-full justify-around md:flex-col md:gap-4">
           <NavItem active={view === 'global'} onClick={() => setView('global')} icon={<LayoutDashboard size={20} />} label="Geral" theme={theme} />
+          <NavItem active={view === 'global-kanban'} onClick={() => setView('global-kanban')} icon={<Kanban size={20} />} label="Kanban Global" theme={theme} />
           <NavItem active={view === 'local'} onClick={() => setView('local')} icon={<Target size={20} />} label="Foco" theme={theme} />
           <NavItem active={view === 'rewards'} onClick={() => setView('rewards')} icon={<Trophy size={20} />} label="Prêmios" theme={theme} />
           <NavItem active={view === 'metrics'} onClick={() => setView('metrics')} icon={<TrendingUp size={20} />} label="Métricas" theme={theme} />
@@ -1222,7 +1231,7 @@ const App: React.FC = () => {
         <header className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-1">
             <h2 className="text-3xl font-black tracking-tight">
-              {view === 'global' ? 'Visão Geral' : view === 'local' ? 'Foco Local' : view === 'rewards' ? 'Recompensas' : view === 'metrics' ? 'Métricas de Foco' : 'Histórico de Conquistas'}
+              {view === 'global' ? 'Visão Geral' : view === 'global-kanban' ? 'Kanban Global' : view === 'local' ? 'Foco Local' : view === 'rewards' ? 'Recompensas' : view === 'metrics' ? 'Métricas de Foco' : 'Histórico de Conquistas'}
             </h2>
             <div className={`flex items-center gap-2 ${textMuted}`}>
               <Lightbulb size={16} className="text-amber-500" />
@@ -1240,6 +1249,11 @@ const App: React.FC = () => {
                   <Plus size={20} /> Novo Objetivo
                 </button>
                </>
+             )}
+             {view === 'global-kanban' && (
+                <button onClick={() => { setTaskToProject({...taskToProject, projectId: ''}); setActiveModal('task'); }} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-indigo-200/50 hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+                  <Plus size={20} /> Nova Micro-tarefa
+                </button>
              )}
              {view === 'rewards' && (
                 <button onClick={() => setActiveModal('reward')} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-purple-200/50 hover:scale-105 transition-all flex items-center gap-2">
@@ -1324,6 +1338,86 @@ const App: React.FC = () => {
                  <button onClick={() => setActiveModal('macro')} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black">Começar Agora</button>
               </div>
             )}
+          </div>
+        )}
+
+        {view === 'global-kanban' && (
+          <div className="space-y-8 animate-in fade-in duration-300">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-h-[500px]">
+              <KanbanCol 
+                title="A Fazer" 
+                theme={theme} 
+                tasks={tasks.filter(t => !t.completed).flatMap(t => t.subTasks.filter(s => s.status === 'todo').map(s => ({...s, parentTitle: t.title}))).sort(sortByUrgency)} 
+                onDrop={() => onDrop('todo')} 
+                onDragOver={(e: React.DragEvent) => e.preventDefault()} 
+                onDragStart={setDraggedSubTaskId} 
+                onEditSubTask={(st: SubTask, e: any) => {
+                  const parentTask = tasks.find(t => t.subTasks.some(s => s.id === st.id));
+                  if (parentTask) handleOpenEditSubTask(parentTask.id, st, e);
+                }} 
+                onDuplicateSubTask={(st: SubTask, e: any) => {
+                  const parentTask = tasks.find(t => t.subTasks.some(s => s.id === st.id));
+                  if (parentTask) handleOpenDuplicateSubTask(parentTask.id, st, e);
+                }}
+                onDeleteSubTask={(subId: string) => {
+                  const parentTask = tasks.find(t => t.subTasks.some(s => s.id === subId));
+                  if (parentTask) handleDeleteSubTask(parentTask.id, subId);
+                }} 
+                formatDate={formatDate} 
+                isOverdue={isOverdue} 
+                isDueToday={isDueToday}
+              />
+              <KanbanCol 
+                title="Fazendo" 
+                theme={theme} 
+                tasks={tasks.filter(t => !t.completed).flatMap(t => t.subTasks.filter(s => s.status === 'doing').map(s => ({...s, parentTitle: t.title}))).sort(sortByUrgency)} 
+                onDrop={() => onDrop('doing')} 
+                onDragOver={(e: React.DragEvent) => e.preventDefault()} 
+                onDragStart={setDraggedSubTaskId} 
+                onEditSubTask={(st: SubTask, e: any) => {
+                  const parentTask = tasks.find(t => t.subTasks.some(s => s.id === st.id));
+                  if (parentTask) handleOpenEditSubTask(parentTask.id, st, e);
+                }} 
+                onDuplicateSubTask={(st: SubTask, e: any) => {
+                  const parentTask = tasks.find(t => t.subTasks.some(s => s.id === st.id));
+                  if (parentTask) handleOpenDuplicateSubTask(parentTask.id, st, e);
+                }}
+                onDeleteSubTask={(subId: string) => {
+                  const parentTask = tasks.find(t => t.subTasks.some(s => s.id === subId));
+                  if (parentTask) handleDeleteSubTask(parentTask.id, subId);
+                }} 
+                formatDate={formatDate} 
+                isOverdue={isOverdue} 
+                isDueToday={isDueToday}
+                highlight 
+              />
+              <KanbanCol 
+                title="Concluído" 
+                theme={theme} 
+                tasks={tasks.filter(t => !t.completed).flatMap(t => t.subTasks.filter(s => s.status === 'done' && !s.archived).map(s => ({...s, parentTitle: t.title}))).sort(sortByUrgency)} 
+                onDrop={() => onDrop('done')} 
+                onDragOver={(e: React.DragEvent) => e.preventDefault()} 
+                onDragStart={setDraggedSubTaskId} 
+                onEditSubTask={(st: SubTask, e: any) => {
+                  const parentTask = tasks.find(t => t.subTasks.some(s => s.id === st.id));
+                  if (parentTask) handleOpenEditSubTask(parentTask.id, st, e);
+                }} 
+                onDuplicateSubTask={(st: SubTask, e: any) => {
+                  const parentTask = tasks.find(t => t.subTasks.some(s => s.id === st.id));
+                  if (parentTask) handleOpenDuplicateSubTask(parentTask.id, st, e);
+                }}
+                onDeleteSubTask={(subId: string) => {
+                  const parentTask = tasks.find(t => t.subTasks.some(s => s.id === subId));
+                  if (parentTask) handleDeleteSubTask(parentTask.id, subId);
+                }} 
+                formatDate={formatDate} 
+                isOverdue={isOverdue} 
+                isDueToday={isDueToday}
+                onArchive={() => {
+                  tasks.filter(t => !t.completed).forEach(t => handleArchiveDoneSubTasks(t.id));
+                }}
+              />
+            </div>
           </div>
         )}
 
@@ -1984,6 +2078,21 @@ const App: React.FC = () => {
       {activeModal === 'task' && (
         <Modal title="Nova Micro-tarefa" onClose={() => setActiveModal(null)} theme={theme}>
           <div className="space-y-6">
+            {(view === 'global-kanban' || !activeTaskId) && (
+              <div>
+                <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Objetivo (Macro-tarefa)</label>
+                <select 
+                  value={taskToProject.projectId} 
+                  onChange={e => setTaskToProject({...taskToProject, projectId: e.target.value})} 
+                  className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`}
+                >
+                  <option value="" disabled>Selecione um objetivo</option>
+                  {tasks.filter(t => !t.completed).map(t => (
+                    <option key={t.id} value={t.id}>{t.title}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>O que precisa ser feito?</label>
               <input autoFocus value={taskToProject.title} onChange={e => setTaskToProject({...taskToProject, title: e.target.value})} placeholder="Ex: Tirar o lixo da mesa" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
@@ -2029,7 +2138,7 @@ const App: React.FC = () => {
               <input value={taskToProject.link} onChange={e => setTaskToProject({...taskToProject, link: e.target.value})} placeholder="https://..." className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
 
-            <button onClick={handleAddTaskToProject} disabled={!taskToProject.title.trim()} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-900/20 hover:scale-[1.02] transition-all disabled:opacity-50">Adicionar à Lista</button>
+            <button onClick={handleAddTaskToProject} disabled={!taskToProject.title.trim() || (view === 'global-kanban' ? !taskToProject.projectId : (!activeTaskId && !taskToProject.projectId))} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-900/20 hover:scale-[1.02] transition-all disabled:opacity-50">Adicionar à Lista</button>
           </div>
         </Modal>
       )}
@@ -2308,6 +2417,13 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTas
             <div className="flex items-start gap-3">
                <GripVertical size={16} className={`${isLight ? 'text-slate-200 group-hover:text-slate-400' : 'text-slate-700 group-hover:text-slate-500'} mt-0.5`} />
                <div className="flex-1">
+                  {t.parentTitle && (
+                    <div className="mb-1.5">
+                      <span className={`inline-block px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${isLight ? 'bg-slate-100 text-slate-500' : 'bg-slate-800 text-slate-400'}`}>
+                        {t.parentTitle}
+                      </span>
+                    </div>
+                  )}
                   <p className={`font-bold leading-tight pr-8 ${t.completed ? 'line-through' : ''}`}>{t.title}</p>
                   <div className="flex flex-col gap-1 mt-1">
                     {t.notes && (
