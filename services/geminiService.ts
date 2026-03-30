@@ -41,8 +41,8 @@ export const breakdownTask = async (taskTitle: string) => {
   }
 };
 
-export const getMotivation = async (stats: { points: number, streak: number }) => {
-  const prompt = `Gere uma frase curta e encorajadora para uma pessoa com TDAH que tem ${stats.points} pontos e uma sequência de ${stats.streak} dias de foco. Seja amigável e focado em progresso, não perfeição.`;
+export const getMotivation = async (stats: { streak: number }) => {
+  const prompt = `Gere uma frase curta e encorajadora para uma pessoa com TDAH que tem uma sequência de ${stats.streak} dias de foco. Seja amigável e focado em progresso, não perfeição.`;
   
   try {
     const response = await ai.models.generateContent({

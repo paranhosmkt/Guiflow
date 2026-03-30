@@ -13,20 +13,11 @@ export interface MonthlyGoal {
   completed: boolean;
 }
 
-export interface RedeemedReward {
-  id: string;
-  title: string;
-  cost: number;
-  icon: string;
-  redeemedAt: string;
-}
-
 export interface SubTask {
   id: string;
   title: string;
   completed: boolean;
   status: TaskStatus;
-  rewardPoints: number; // Points awarded when this specific sub-task is completed
   dueDate?: string; // Optional deadline for the sub-task
   urgency?: number; // Urgency level (e.g., 1 to 3)
   notes?: string; // Comentário ou observação sobre a micro-tarefa
@@ -46,7 +37,6 @@ export interface Task {
   category: string;
   completed: boolean;
   subTasks: SubTask[];
-  rewardPoints: number; // Bonus points for completing the whole macro project
   totalTimeSpent?: number; // Total focused time in minutes
   timeSpentByMonth?: Record<string, number>; // Tempo focado por mês (YYYY-MM)
   completedAt?: string; // ISO string date
@@ -55,15 +45,7 @@ export interface Task {
   postIt?: string; // Comentário temporário em destaque
 }
 
-export interface Reward {
-  id: string;
-  title: string;
-  cost: number;
-  icon: string;
-}
-
 export interface UserStats {
-  points: number;
   tasksCompleted: number;
   streak: number;
 }

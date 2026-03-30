@@ -57,14 +57,12 @@ import {
   Kanban
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Task, UserStats, Reward, SubTask, TaskStatus, ProjectLink, MonthlyGoal, RedeemedReward } from './types';
+import { Task, UserStats, SubTask, TaskStatus, ProjectLink, MonthlyGoal } from './types';
 
 // Constantes para LocalStorage
 const STORAGE_KEYS = {
   TASKS: 'guiflow_tasks_v2',
   COMPLETED_TASKS: 'guiflow_completed_tasks_v2',
-  REWARDS: 'guiflow_rewards_v2',
-  REDEEMED_REWARDS: 'guiflow_redeemed_rewards_v2',
   STATS: 'guiflow_stats_v2',
   THEME: 'guiflow_theme_v2',
   MONTHLY_GOALS: 'guiflow_monthly_goals_v2'
@@ -110,22 +108,10 @@ const MOTIVATION_QUOTES = [
   "Você sobreviveu a 100% dos seus dias difíceis até agora."
 ];
 
-const EMOJI_OPTIONS = [
-  '🎁', '🍫', '🍦', '🍕', '🎮', '🎬', '📺', '📱', '🛌', '🧘', 
-  '🛀', '🛀', '📚', '🎨', '🎧', '🎸', '🎧', '🛹', '🍦', '🧁', '🍕',
-  '☕', '🍵', '🍷', '🍺', '🏖️', '⛰️', '🎡', '🎢', '💎', '💰'
-];
-
-const INITIAL_REWARDS: Reward[] = [
-  { id: 'r1', title: '15 min de descanso total', cost: 50, icon: '🧘' },
-  { id: 'r2', title: 'Comer um doce', cost: 100, icon: '🍫' },
-  { id: 'r3', title: 'Episódio de série', cost: 300, icon: '📺' },
-];
-
 const COMPLEXITY_LEVELS = [
-  { id: 'simple', label: 'Simples', points: 5, icon: <BatteryLow size={14} />, example: 'Ex: Responder e-mail, lavar louça' },
-  { id: 'medium', label: 'Intermediária', points: 10, icon: <BatteryMedium size={14} />, example: 'Ex: Cadastro no sistema, relatório' },
-  { id: 'complex', label: 'Complexa', points: 20, icon: <BatteryFull size={14} />, example: 'Ex: Resolver bug difícil, estudar' }
+  { id: 'simple', label: 'Simples', icon: <BatteryLow size={14} />, example: 'Ex: Responder e-mail, lavar louça' },
+  { id: 'medium', label: 'Intermediária', icon: <BatteryMedium size={14} />, example: 'Ex: Cadastro no sistema, relatório' },
+  { id: 'complex', label: 'Complexa', icon: <BatteryFull size={14} />, example: 'Ex: Resolver bug difícil, estudar' }
 ];
 
 const playAlertSound = (type: 'work-end' | 'break-end') => {
@@ -168,19 +154,9 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [rewards, setRewards] = useState<Reward[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.REWARDS);
-    return saved ? JSON.parse(saved) : INITIAL_REWARDS;
-  });
-
-  const [redeemedRewards, setRedeemedRewards] = useState<RedeemedReward[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.REDEEMED_REWARDS);
-    return saved ? JSON.parse(saved) : [];
-  });
-
   const [stats, setStats] = useState<UserStats>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.STATS);
-    return saved ? JSON.parse(saved) : { points: 0, tasksCompleted: 0, streak: 1 };
+    return saved ? JSON.parse(saved) : { tasksCompleted: 0, streak: 1 };
   });
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -193,11 +169,10 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [view, setView] = useState<'global' | 'global-kanban' | 'local' | 'rewards' | 'history' | 'metrics'>('global');
+  const [view, setView] = useState<'global' | 'global-kanban' | 'local' | 'history' | 'metrics'>('global');
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [motivation, setMotivation] = useState("");
   const [draggedSubTaskId, setDraggedSubTaskId] = useState<string | null>(null);
-  const [showCelebration, setShowCelebration] = useState<{points: number} | null>(null);
 
   // Estados Pomodoro Customizáveis
   const [workDuration, setWorkDuration] = useState(25);
@@ -237,14 +212,13 @@ const App: React.FC = () => {
     activeTaskIdRef.current = activeTaskId;
   }, [activeTaskId]);
 
-  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'reward' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | 'settings' | 'duplicate-task' | 'move-task' | null>(null);
+  const [activeModal, setActiveModal] = useState<'macro' | 'task' | 'edit-macro' | 'edit-task' | 'link' | 'monthly' | 'settings' | 'duplicate-task' | 'move-task' | null>(null);
   const [taskToMove, setTaskToMove] = useState<string | null>(null);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
   const [newTaskDate, setNewTaskDate] = useState("");
-  const [taskToProject, setTaskToProject] = useState({ title: "", notes: "", link: "", points: 5, projectId: "", dueDate: "", urgency: 1 });
-  const [newReward, setNewReward] = useState({ title: "", cost: 50, icon: "🎁" });
+  const [taskToProject, setTaskToProject] = useState({ title: "", notes: "", link: "", projectId: "", dueDate: "", urgency: 1 });
   const [newLink, setNewLink] = useState({ title: "", url: "" });
   const [newMonthlyGoal, setNewMonthlyGoal] = useState("");
 
@@ -256,15 +230,8 @@ const App: React.FC = () => {
 
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks)); }, [tasks]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.COMPLETED_TASKS, JSON.stringify(completedTasks)); }, [completedTasks]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.REWARDS, JSON.stringify(rewards)); }, [rewards]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.REDEEMED_REWARDS, JSON.stringify(redeemedRewards)); }, [redeemedRewards]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(stats)); }, [stats]);
 
-  const nextReward = useMemo(() => {
-    const unaffordable = rewards.filter(r => r.cost > stats.points);
-    if (unaffordable.length === 0) return null;
-    return unaffordable.sort((a, b) => a.cost - b.cost)[0];
-  }, [rewards, stats.points]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.THEME, theme); }, [theme]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.MONTHLY_GOALS, JSON.stringify(monthlyGoals)); }, [monthlyGoals]);
 
@@ -583,7 +550,6 @@ const App: React.FC = () => {
       category: 'Geral',
       completed: false,
       subTasks: [],
-      rewardPoints: 50,
       totalTimeSpent: 0,
       links: []
     };
@@ -637,10 +603,9 @@ const App: React.FC = () => {
     const activeTask: Task = { ...task, status: 'todo', completed: false, completedAt: undefined };
     setTasks(prev => [...prev, activeTask]);
     
-    // Reverse points
+    // Update stats
     setStats(prev => ({
       ...prev,
-      points: Math.max(0, prev.points - task.rewardPoints),
       tasksCompleted: Math.max(0, prev.tasksCompleted - 1)
     }));
 
@@ -654,7 +619,6 @@ const App: React.FC = () => {
         setCompletedTasks(prev => [task, ...prev]);
         setStats(prev => ({
             ...prev,
-            points: prev.points + task.rewardPoints,
             tasksCompleted: prev.tasksCompleted + 1
         }));
         setView('history');
@@ -663,36 +627,6 @@ const App: React.FC = () => {
     });
 
     setTimeout(() => setUndoToast(null), 5000);
-  };
-
-  const handleRedeemReward = (reward: Reward) => {
-    if (stats.points < reward.cost) return;
-
-    const redemption: RedeemedReward = {
-      id: Date.now().toString(),
-      title: reward.title,
-      cost: reward.cost,
-      icon: reward.icon,
-      redeemedAt: new Date().toISOString()
-    };
-
-    setStats(s => ({ ...s, points: s.points - reward.cost }));
-    setRedeemedRewards(prev => [redemption, ...prev]);
-    
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: ['#a855f7', '#ec4899', '#6366f1']
-    });
-
-    alert(`🎉 Parabéns! Você resgatou: ${reward.title}. Aproveite seu prêmio, você mereceu!`);
-  };
-
-  const handleDeleteRedeemed = (id: string) => {
-    if (confirm("Remover este registro do histórico de resgates?")) {
-      setRedeemedRewards(prev => prev.filter(r => r.id !== id));
-    }
   };
 
   const handleAddTaskToProject = () => {
@@ -706,13 +640,12 @@ const App: React.FC = () => {
       link: taskToProject.link,
       completed: false, 
       status: 'todo',
-      rewardPoints: taskToProject.points,
       dueDate: taskToProject.dueDate,
       urgency: taskToProject.urgency
     };
 
     setTasks(prev => prev.map(t => t.id === targetId ? { ...t, subTasks: [...t.subTasks, newSub] } : t));
-    setTaskToProject({ title: "", notes: "", link: "", points: 5, projectId: "", dueDate: "", urgency: 1 });
+    setTaskToProject({ title: "", notes: "", link: "", projectId: "", dueDate: "", urgency: 1 });
     setActiveModal(null);
   };
 
@@ -826,10 +759,7 @@ const App: React.FC = () => {
           ...t,
           subTasks: t.subTasks.map(st => {
             if (st.id === subId) {
-              const wasDone = st.status === 'done';
               const isNowDone = newStatus === 'done';
-              if (!wasDone && isNowDone) setStats(s => ({ ...s, points: s.points + st.rewardPoints }));
-              if (wasDone && !isNowDone) setStats(s => ({ ...s, points: Math.max(0, s.points - st.rewardPoints) }));
               return { ...st, status: newStatus, completed: isNowDone };
             }
             return st;
@@ -891,14 +821,14 @@ const App: React.FC = () => {
       completed: true,
       completedAt: new Date().toISOString()
     };
-    triggerCelebration(task.rewardPoints);
-    setStats(s => ({ ...s, points: s.points + task.rewardPoints, tasksCompleted: s.tasksCompleted + 1 }));
+    triggerCelebration();
+    setStats(s => ({ ...s, tasksCompleted: s.tasksCompleted + 1 }));
     setCompletedTasks([finalizedTask, ...completedTasks]);
     setTasks(prev => prev.filter(t => t.id !== id));
     setActiveTaskId(null);
   };
 
-  const triggerCelebration = (points: number) => {
+  const triggerCelebration = () => {
     const duration = 4 * 1000;
     const animationEnd = Date.now() + duration;
     const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
@@ -919,31 +849,15 @@ const App: React.FC = () => {
       colors: ['#6366f1', '#a855f7', '#10b981', '#fbbf24']
     });
 
-    setShowCelebration({ points });
     setTimeout(() => {
-      setShowCelebration(null);
       setView('history');
     }, 4000);
-  };
-
-  const handleCreateReward = () => {
-    if (!newReward.title.trim()) return;
-    const reward: Reward = { id: Date.now().toString(), ...newReward };
-    setRewards([...rewards, reward]);
-    setNewReward({ title: "", cost: 50, icon: "🎁" });
-    setActiveModal(null);
-  };
-
-  const handleDeleteReward = (id: string) => {
-    setRewards(rewards.filter(r => r.id !== id));
   };
 
   const handleExportData = () => {
     const data = {
       tasks,
       completedTasks,
-      rewards,
-      redeemedRewards,
       stats,
       monthlyGoals,
       theme,
@@ -977,8 +891,6 @@ const App: React.FC = () => {
         if (confirm("Isso substituirá todos os seus dados atuais pelos dados do backup. Continuar?")) {
           setTasks(data.tasks);
           setCompletedTasks(data.completedTasks || []);
-          setRewards(data.rewards || INITIAL_REWARDS);
-          setRedeemedRewards(data.redeemedRewards || []);
           setStats(data.stats);
           setMonthlyGoals(data.monthlyGoals || []);
           if (data.theme) setTheme(data.theme);
@@ -1184,7 +1096,6 @@ const App: React.FC = () => {
           <NavItem active={view === 'global'} onClick={() => setView('global')} icon={<LayoutDashboard size={20} />} label="Geral" theme={theme} />
           <NavItem active={view === 'global-kanban'} onClick={() => setView('global-kanban')} icon={<Kanban size={20} />} label="Kanban Global" theme={theme} />
           <NavItem active={view === 'local'} onClick={() => setView('local')} icon={<Target size={20} />} label="Foco" theme={theme} />
-          <NavItem active={view === 'rewards'} onClick={() => setView('rewards')} icon={<Trophy size={20} />} label="Prêmios" theme={theme} />
           <NavItem active={view === 'metrics'} onClick={() => setView('metrics')} icon={<TrendingUp size={20} />} label="Métricas" theme={theme} />
           <NavItem active={view === 'history'} onClick={() => setView('history')} icon={<History size={20} />} label="Histórico" theme={theme} />
           
@@ -1195,34 +1106,6 @@ const App: React.FC = () => {
         </div>
 
         <div className="hidden md:mt-auto md:block w-full">
-          <div className="bg-slate-900 dark:bg-black p-5 rounded-[2rem] text-white shadow-xl border border-slate-800">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Pontos Atuais</p>
-            <div className="text-3xl font-black text-indigo-400 flex items-baseline gap-1 mb-4">
-              {stats.points} <span className="text-xs text-slate-400">pts</span>
-            </div>
-            {nextReward && (
-              <div className="space-y-2">
-                <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  <span className="truncate mr-2">{nextReward.title}</span>
-                  <span>{nextReward.cost} pts</span>
-                </div>
-                <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out"
-                    style={{ width: `${Math.min(100, (stats.points / nextReward.cost) * 100)}%` }}
-                  />
-                </div>
-                <p className="text-[9px] text-slate-500 font-medium text-right">
-                  Faltam {nextReward.cost - stats.points} pts
-                </p>
-              </div>
-            )}
-            {!nextReward && rewards.length > 0 && (
-              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 text-center bg-emerald-900/20 py-2 rounded-xl">
-                Tudo desbloqueado!
-              </div>
-            )}
-          </div>
         </div>
       </nav>
 
@@ -1231,7 +1114,7 @@ const App: React.FC = () => {
         <header className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-1">
             <h2 className="text-3xl font-black tracking-tight">
-              {view === 'global' ? 'Visão Geral' : view === 'global-kanban' ? 'Kanban Global' : view === 'local' ? 'Foco Local' : view === 'rewards' ? 'Recompensas' : view === 'metrics' ? 'Métricas de Foco' : 'Histórico de Conquistas'}
+              {view === 'global' ? 'Visão Geral' : view === 'global-kanban' ? 'Kanban Global' : view === 'local' ? 'Foco Local' : view === 'metrics' ? 'Métricas de Foco' : 'Histórico de Conquistas'}
             </h2>
             <div className={`flex items-center gap-2 ${textMuted}`}>
               <Lightbulb size={16} className="text-amber-500" />
@@ -1255,56 +1138,8 @@ const App: React.FC = () => {
                   <Plus size={20} /> Nova Micro-tarefa
                 </button>
              )}
-             {view === 'rewards' && (
-                <button onClick={() => setActiveModal('reward')} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-purple-200/50 hover:scale-105 transition-all flex items-center gap-2">
-                  <Gift size={20} /> Novo Prêmio
-                </button>
-             )}
           </div>
         </header>
-
-        {/* Mobile Points Progress */}
-        {view !== 'rewards' && (
-          <div className="md:hidden mb-8">
-            <div className={`${theme === 'light' ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'} p-5 rounded-[2rem] border shadow-sm`}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center">
-                    <Trophy size={20} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Pontos</p>
-                    <p className="text-xl font-black leading-none text-indigo-600 dark:text-indigo-400">{stats.points}</p>
-                  </div>
-                </div>
-                {nextReward && (
-                  <div className="text-right">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Próximo Prêmio</p>
-                    <p className="text-sm font-bold truncate max-w-[120px]">{nextReward.title}</p>
-                  </div>
-                )}
-              </div>
-              {nextReward && (
-                <div className="space-y-2">
-                  <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out"
-                      style={{ width: `${Math.min(100, (stats.points / nextReward.cost) * 100)}%` }}
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-500 font-medium text-right">
-                    Faltam {nextReward.cost - stats.points} pts
-                  </p>
-                </div>
-              )}
-              {!nextReward && rewards.length > 0 && (
-                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 text-center bg-emerald-50 dark:bg-emerald-900/20 py-2 rounded-xl">
-                  Tudo desbloqueado!
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Render Views */}
         {view === 'global' && (
@@ -1519,7 +1354,7 @@ const App: React.FC = () => {
                         onClick={() => finishMacroProject(activeTask.id)} 
                         className={`whitespace-nowrap px-8 py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-xl ${isProjectReadyToFinish ? 'scale-110' : ''} ${theme === 'light' ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-indigo-600 text-white shadow-indigo-900/40'} ${!isProjectReadyToFinish ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105 active:scale-95'}`}
                       >
-                        <CheckCircle2 size={20} className={theme === 'light' ? 'text-indigo-400' : 'text-white'} /> Finalizar Objetivo (+{activeTask.rewardPoints} pts)
+                        <CheckCircle2 size={20} className={theme === 'light' ? 'text-indigo-400' : 'text-white'} /> Finalizar Objetivo
                       </button>
                     </div>
                   </div>
@@ -1699,121 +1534,6 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {view === 'rewards' && (
-          <div className="space-y-12 animate-in fade-in duration-500">
-            <div className={`${theme === 'light' ? 'bg-slate-900' : 'bg-black'} rounded-[3rem] p-10 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl border border-slate-800`}>
-               <div className="flex-1 w-full">
-                  <p className="text-indigo-400 font-black uppercase tracking-widest text-xs mb-2">Saldo de Recompensas</p>
-                  <h3 className="text-6xl font-black tabular-nums mb-6">{stats.points} <span className="text-xl text-slate-500 uppercase">pts</span></h3>
-                  
-                  {nextReward && (
-                    <div className="w-full max-w-md space-y-3">
-                      <div className="flex justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
-                        <span className="truncate mr-2">Próximo: {nextReward.title}</span>
-                        <span>{nextReward.cost} pts</span>
-                      </div>
-                      <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out relative overflow-hidden"
-                          style={{ width: `${Math.min(100, (stats.points / nextReward.cost) * 100)}%` }}
-                        >
-                          <div className="absolute inset-0 bg-white/20 w-full animate-[shimmer_2s_infinite] -translate-x-full" style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)' }} />
-                        </div>
-                      </div>
-                      <p className="text-xs text-slate-500 font-medium text-right">
-                        Faltam <span className="text-indigo-400 font-bold">{nextReward.cost - stats.points}</span> pts
-                      </p>
-                    </div>
-                  )}
-                  {!nextReward && rewards.length > 0 && (
-                    <div className="w-full max-w-md text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-900/20 py-3 px-4 rounded-xl border border-emerald-800/30">
-                      🎉 Você tem pontos suficientes para resgatar qualquer prêmio!
-                    </div>
-                  )}
-               </div>
-               <div className="w-32 h-32 bg-indigo-600 rounded-3xl flex items-center justify-center rotate-6 shadow-xl shrink-0"><Trophy size={64} /></div>
-            </div>
-
-            <div className="space-y-6">
-              <div className="flex items-center gap-3">
-                 <div className="p-2 bg-indigo-600/10 text-indigo-500 rounded-xl"><Gift size={24} /></div>
-                 <h3 className="text-2xl font-black">Recompensas Disponíveis</h3>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {rewards.map(reward => (
-                  <div key={reward.id} className={`${bgCard} p-8 rounded-[2.5rem] border-2 transition-all relative group flex flex-col justify-between ${stats.points >= reward.cost ? 'border-indigo-600/20 shadow-md' : `${borderCard} opacity-60`}`}>
-                    <button onClick={() => handleDeleteReward(reward.id)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
-                    <div className="text-5xl mb-6">{reward.icon}</div>
-                    <div>
-                      <h4 className="text-xl font-black mb-1">{reward.title}</h4>
-                      <p className="text-indigo-500 font-black text-sm uppercase tracking-wider">{reward.cost} pontos</p>
-                      
-                      {stats.points < reward.cost && (
-                        <div className="mt-4 space-y-2">
-                          <div className="h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-indigo-400 rounded-full transition-all duration-1000"
-                              style={{ width: `${Math.min(100, (stats.points / reward.cost) * 100)}%` }}
-                            />
-                          </div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider text-right">
-                            Faltam {reward.cost - stats.points} pts
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                    <button 
-                      disabled={stats.points < reward.cost}
-                      onClick={() => handleRedeemReward(reward)}
-                      className={`mt-6 w-full py-4 rounded-2xl font-black transition-all ${stats.points >= reward.cost ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-900/20' : (theme === 'light' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-800 text-slate-600 cursor-not-allowed')}`}
-                    >Resgatar</button>
-                  </div>
-                ))}
-                <button onClick={() => setActiveModal('reward')} className={`p-8 h-full min-h-[250px] rounded-[2.5rem] border-2 border-dashed flex flex-col items-center justify-center transition-all group ${bgCard} ${borderMain} ${textMuted} hover:border-purple-600/40 hover:text-purple-500`}>
-                   <PlusCircle size={32} />
-                   <span className="font-bold text-xs uppercase mt-3 tracking-widest">Novo Prêmio</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-6 pt-10 border-t border-slate-200 dark:border-slate-800">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                   <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl"><ShoppingBag size={24} /></div>
-                   <h3 className="text-2xl font-black">Histórico de prêmios</h3>
-                </div>
-                {redeemedRewards.length > 0 && (
-                  <button onClick={() => { if(confirm("Deseja limpar todo o histórico?")) setRedeemedRewards([]); }} className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-all ${theme === 'light' ? 'bg-slate-100 text-slate-400 hover:bg-rose-50 hover:text-rose-500' : 'bg-slate-800 text-slate-500 hover:bg-rose-900/20 hover:text-rose-400'}`}>Limpar Tudo</button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {redeemedRewards.length > 0 ? (
-                  redeemedRewards.map(record => (
-                    <div key={record.id} className={`${bgCard} p-5 rounded-[2rem] border ${borderCard} flex items-center gap-4 group relative`}>
-                      <div className="text-3xl p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl">{record.icon}</div>
-                      <div className="flex-1 min-w-0">
-                         <h4 className="font-bold text-sm truncate">{record.title}</h4>
-                         <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px] font-black text-indigo-500 uppercase">{record.cost} pts</span>
-                            <span className="text-[10px] text-slate-400">•</span>
-                            <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1"><Clock size={10} /> {formatFullDate(record.redeemedAt)}</span>
-                         </div>
-                      </div>
-                      <button onClick={() => handleDeleteRedeemed(record.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={14} /></button>
-                    </div>
-                  ))
-                ) : (
-                  <div className={`col-span-full py-16 text-center ${bgCard} rounded-[3rem] border-2 border-dashed ${borderMain}`}>
-                     <ShoppingBag size={40} className="text-slate-200 mx-auto mb-4" />
-                     <p className={`text-sm font-bold ${textMuted}`}>Você ainda não resgatou nenhum prêmio. Comece a acumular pontos!</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         {view === 'metrics' && (
           <div className="space-y-6 animate-in fade-in duration-500">
              <div className={`${bgCard} p-8 rounded-[3rem] border ${borderCard} shadow-sm`}>
@@ -1897,7 +1617,6 @@ const App: React.FC = () => {
             {completedTasks.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {completedTasks.map(task => {
-                  const totalEarnedPoints = (task.rewardPoints || 0) + (task.subTasks || []).reduce((acc, st) => acc + (st.rewardPoints || 0), 0);
                   return (
                     <div key={task.id} onClick={() => handleReactivateTask(task.id)} className={`${bgCard} p-8 rounded-[3rem] border ${borderCard} shadow-sm flex flex-col justify-between group relative cursor-pointer hover:border-indigo-500 transition-all`}>
                       <button onClick={(e) => { e.stopPropagation(); handleDeleteHistoryTask(task.id); }} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
@@ -1910,13 +1629,6 @@ const App: React.FC = () => {
                         <div className={`flex items-center gap-4 ${textMuted}`}>
                           <div className="flex items-center gap-1 text-[11px] font-bold"><Clock size={14} className="text-indigo-500" /><span>Tempo Focado: {formatTimeSpent(task.totalTimeSpent)}</span></div>
                         </div>
-                      </div>
-                      <div className={`mt-6 pt-6 border-t ${borderCard} flex items-center justify-between`}>
-                         <div className="flex flex-col">
-                           <span className={`text-[10px] font-black uppercase tracking-widest ${textMuted}`}>Recompensa Ganha:</span>
-                           <span className="text-[8px] font-medium opacity-40 uppercase tracking-tighter">(Objetivo + Micro-tarefas)</span>
-                         </div>
-                         <div className="flex items-center gap-1 text-indigo-500 font-black"><Zap size={14} fill="currentColor" /> +{totalEarnedPoints} pts</div>
                       </div>
                     </div>
                   );
@@ -1948,21 +1660,6 @@ const App: React.FC = () => {
              </button>
              <button onClick={() => setUndoToast(null)} className="opacity-50 hover:opacity-100"><X size={16} /></button>
           </div>
-        </div>
-      )}
-
-      {/* Celebration Overlay */}
-      {showCelebration && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-           <div className="absolute inset-0 bg-indigo-950/40 backdrop-blur-md animate-in fade-in duration-300" />
-           <div className={`relative p-12 rounded-[4rem] text-center shadow-2xl animate-in zoom-in-95 duration-500 flex flex-col items-center border ${theme === 'light' ? 'bg-white border-white' : 'bg-slate-900 border-slate-800'}`}>
-              <div className="w-24 h-24 bg-amber-400 rounded-full flex items-center justify-center mb-6 shadow-xl animate-bounce"><Star size={48} className="text-white" fill="currentColor" /></div>
-              <h2 className="text-4xl font-black tracking-tighter mb-2">OBJETIVO ALCANÇADO!</h2>
-              <div className="bg-indigo-700 text-white px-8 py-4 rounded-3xl flex items-center gap-3 shadow-lg shadow-indigo-900/30">
-                 <Zap size={32} fill="currentColor" />
-                 <div className="text-left"><span className="text-[10px] font-black uppercase tracking-widest opacity-70">Recompensa Extra</span><div className="text-2xl font-black leading-none">+{showCelebration.points} PONTOS</div></div>
-              </div>
-           </div>
         </div>
       )}
 
@@ -2098,11 +1795,7 @@ const App: React.FC = () => {
               <input autoFocus value={taskToProject.title} onChange={e => setTaskToProject({...taskToProject, title: e.target.value})} placeholder="Ex: Tirar o lixo da mesa" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Pontuação</label>
-                <input type="number" min="1" value={taskToProject.points} onChange={e => setTaskToProject({...taskToProject, points: parseInt(e.target.value) || 0})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
-              </div>
+            <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Grau de Urgência</label>
                 <div className="flex gap-2">
@@ -2171,11 +1864,7 @@ const App: React.FC = () => {
               <input autoFocus value={editingSubTask.subTask.title} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, title: e.target.value}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Pontuação</label>
-                <input type="number" min="1" value={editingSubTask.subTask.rewardPoints} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, rewardPoints: parseInt(e.target.value) || 0}})} className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-emerald-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
-              </div>
+            <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className={`text-[10px] font-black uppercase tracking-widest mb-2 block ${textMuted}`}>Grau de Urgência</label>
                 <div className="flex gap-2">
@@ -2274,21 +1963,6 @@ const App: React.FC = () => {
               <input value={newLink.url} onChange={e => setNewLink({...newLink, url: e.target.value})} placeholder="Ex: google.com" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-indigo-600 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
             </div>
             <button onClick={handleAddLink} disabled={!newLink.title.trim() || !newLink.url.trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl active:scale-95 transition-all disabled:opacity-50">Salvar Link</button>
-          </div>
-        </Modal>
-      )}
-
-      {activeModal === 'reward' && (
-        <Modal title="Criar Recompensa" onClose={() => setActiveModal(null)} theme={theme}>
-          <div className="space-y-6">
-             <div className={`grid grid-cols-6 gap-2 p-4 rounded-3xl max-h-40 overflow-y-auto ${theme === 'light' ? 'bg-slate-50' : 'bg-slate-800'}`}>
-               {EMOJI_OPTIONS.map(emoji => (
-                 <button key={emoji} onClick={() => setNewReward({...newReward, icon: emoji})} className={`text-2xl p-2 rounded-xl transition-all ${newReward.icon === emoji ? 'bg-white shadow-md scale-110 border-2 border-purple-200' : 'hover:bg-black/5'}`}>{emoji}</button>
-               ))}
-             </div>
-             <input autoFocus value={newReward.title} onChange={e => setNewReward({...newReward, title: e.target.value})} placeholder="Nome do Prêmio" className={`w-full p-4 border-2 rounded-2xl font-bold outline-none focus:border-purple-600 ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700 text-white'}`} />
-             <input type="number" value={newReward.cost} onChange={e => setNewReward({...newReward, cost: parseInt(e.target.value) || 0})} className={`w-full p-4 border-2 rounded-2xl font-black text-center text-2xl text-purple-500 outline-none ${theme === 'light' ? 'bg-slate-50 border-slate-100' : 'bg-slate-800 border-slate-700'}`} />
-             <button onClick={handleCreateReward} disabled={!newReward.title.trim()} className="w-full bg-purple-600 text-white font-black py-4 rounded-2xl shadow-xl transition-all">Criar Prêmio</button>
           </div>
         </Modal>
       )}
@@ -2437,7 +2111,6 @@ const KanbanCol = ({ title, tasks, onDrop, onDragOver, onDragStart, onEditSubTas
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-3 mt-2">
-                    <div className="flex items-center gap-1 text-[10px] font-black text-indigo-500 uppercase"><Zap size={10} fill="currentColor" /> +{t.rewardPoints} pts</div>
                     {t.urgency && (
                       <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${t.urgency === 3 ? 'text-rose-500' : t.urgency === 2 ? 'text-amber-500' : 'text-blue-500'}`}>
                         <AlertCircle size={10} /> {t.urgency === 3 ? 'Alta' : t.urgency === 2 ? 'Média' : 'Baixa'}
